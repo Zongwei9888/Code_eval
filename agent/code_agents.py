@@ -2,15 +2,22 @@
 Multi-agent system for code analysis, execution, and modification
 Each agent has a specific role in the code improvement workflow
 """
-from typing import List, Dict, Any, Literal
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
-from langchain_core.prompts import ChatPromptTemplate
+from typing import List, Dict, Any
+from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel, Field
-import json
 
-from .tools import ALL_TOOLS
-from .config import get_llm
+from tools import ALL_TOOLS, get_tool_by_name
+from tools.mcp_integration import get_mcp_tools_sync
+from config import get_llm
+from prompt import (
+    ANALYZER_SYSTEM_PROMPT,
+    EXECUTOR_SYSTEM_PROMPT,
+    MODIFIER_SYSTEM_PROMPT,
+    format_analyzer_prompt,
+    format_executor_prompt,
+    format_modifier_prompt
+)
+from agent.state import MultiAgentState
 
 
 class CodeAnalysisState(BaseModel):
@@ -41,57 +48,26 @@ class CodeModificationState(BaseModel):
     changes_made: List[str] = Field(default_factory=list)
 
 
-class MultiAgentState(MessagesState):
-    """
-    Shared state across all agents
-    Extends MessagesState with custom fields for code workflow
-    """
-    # File information
-    target_file: str = ""
-    file_content: str = ""
-    
-    # Analysis results
-    analysis_complete: bool = False
-    code_analysis: str = ""
-    identified_issues: List[str] = Field(default_factory=list)
-    
-    # Execution results
-    execution_attempts: int = 0
-    last_execution_result: str = ""
-    execution_success: bool = False
-    last_error: str = ""
-    
-    # Modification tracking
-    modification_history: List[Dict[str, Any]] = Field(default_factory=list)
-    current_code: str = ""
-    
-    # Workflow control
-    max_attempts: int = 5
-    should_continue: bool = True
-    final_status: str = ""
 
 
 class CodeAnalyzerAgent:
     """Agent for analyzing code structure, quality, and potential issues"""
     
-    def __init__(self, llm_provider: str = "anthropic"):
+    def __init__(self, llm_provider: str = "openrouter"):
         self.llm = get_llm(llm_provider, "default")
-        self.llm_with_tools = self.llm.bind_tools(ALL_TOOLS)
         
-        self.system_prompt = """You are an expert code analyzer. Your role is to:
-1. Analyze code structure and quality
-2. Identify potential bugs, errors, and issues
-3. Assess code complexity and maintainability
-4. Suggest improvements
-
-When analyzing code:
-- Check for syntax errors
-- Look for logical issues
-- Identify missing imports or dependencies
-- Assess code organization
-- Consider edge cases and error handling
-
-Provide a comprehensive analysis with specific, actionable findings."""
+        # Combine standard tools with MCP tools
+        all_tools = ALL_TOOLS.copy()
+        try:
+            mcp_tools = get_mcp_tools_sync()
+            if mcp_tools:
+                all_tools.extend(mcp_tools)
+                print(f"✅ CodeAnalyzerAgent: Added {len(mcp_tools)} MCP tools")
+        except Exception as e:
+            print(f"⚠️  CodeAnalyzerAgent: Could not load MCP tools: {e}")
+        
+        self.llm_with_tools = self.llm.bind_tools(all_tools)
+        self.system_prompt = ANALYZER_SYSTEM_PROMPT
 
     def analyze(self, state: MultiAgentState) -> Dict[str, Any]:
         """Analyze code and identify issues"""
@@ -103,23 +79,13 @@ Provide a comprehensive analysis with specific, actionable findings."""
                 HumanMessage(content=f"Read and analyze the file: {state.target_file}")
             ]
         else:
+            analysis_prompt = format_analyzer_prompt(
+                file_path=state.target_file,
+                code_content=state.file_content or state.current_code
+            )
             messages = state.messages + [
                 SystemMessage(content=self.system_prompt),
-                HumanMessage(content=f"""Analyze the following code:
-
-File: {state.target_file}
-
-Code:
-```python
-{state.file_content or state.current_code}
-```
-
-Provide detailed analysis including:
-1. Code structure assessment
-2. Potential issues or errors
-3. Missing dependencies
-4. Code quality observations
-5. Specific recommendations for improvement""")
+                HumanMessage(content=analysis_prompt)
             ]
         
         response = self.llm_with_tools.invoke(messages)
@@ -133,7 +99,6 @@ Provide detailed analysis including:
                 tool_args = tool_call["args"]
                 
                 # Find and execute tool
-                from .tools import get_tool_by_name
                 tool = get_tool_by_name(tool_name)
                 
                 if tool:
@@ -186,18 +151,21 @@ Provide detailed analysis including:
 class CodeExecutorAgent:
     """Agent for executing code and capturing results/errors"""
     
-    def __init__(self, llm_provider: str = "anthropic"):
+    def __init__(self, llm_provider: str = "openrouter"):
         self.llm = get_llm(llm_provider, "fast")
-        self.llm_with_tools = self.llm.bind_tools(ALL_TOOLS)
         
-        self.system_prompt = """You are a code execution specialist. Your role is to:
-1. Execute code safely
-2. Capture all output and errors
-3. Analyze execution results
-4. Provide clear error diagnosis
-
-Use the available tools to execute code and analyze results.
-Always provide detailed information about what succeeded and what failed."""
+        # Combine standard tools with MCP tools
+        all_tools = ALL_TOOLS.copy()
+        try:
+            mcp_tools = get_mcp_tools_sync()
+            if mcp_tools:
+                all_tools.extend(mcp_tools)
+                print(f"✅ CodeExecutorAgent: Added {len(mcp_tools)} MCP tools")
+        except Exception as e:
+            print(f"⚠️  CodeExecutorAgent: Could not load MCP tools: {e}")
+        
+        self.llm_with_tools = self.llm.bind_tools(all_tools)
+        self.system_prompt = EXECUTOR_SYSTEM_PROMPT
 
     def execute(self, state: MultiAgentState) -> Dict[str, Any]:
         """Execute code and capture results"""
@@ -205,19 +173,14 @@ Always provide detailed information about what succeeded and what failed."""
         code_to_execute = state.current_code or state.file_content
         file_path = state.target_file
         
+        execution_prompt = format_executor_prompt(
+            file_path=file_path,
+            code_content=code_to_execute
+        )
+        
         messages = state.messages + [
             SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"""Execute the following code and analyze the results:
-
-File: {file_path}
-
-Code:
-```python
-{code_to_execute}
-```
-
-Use the execute_python_code tool to run this code.
-Then analyze the execution result and provide a summary.""")
+            HumanMessage(content=execution_prompt)
         ]
         
         response = self.llm_with_tools.invoke(messages)
@@ -233,7 +196,6 @@ Then analyze the execution result and provide a summary.""")
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
                 
-                from .tools import get_tool_by_name
                 tool = get_tool_by_name(tool_name)
                 
                 if tool:
@@ -264,8 +226,9 @@ Then analyze the execution result and provide a summary.""")
                         )
             
             # Get final summary
+            from prompt.system_prompts import EXECUTOR_SUMMARY_PROMPT
             final_response = self.llm.invoke(updated_messages + [
-                HumanMessage(content="Provide a brief summary of the execution results.")
+                HumanMessage(content=EXECUTOR_SUMMARY_PROMPT)
             ])
             updated_messages.append(final_response)
         
@@ -281,24 +244,21 @@ Then analyze the execution result and provide a summary.""")
 class CodeModifierAgent:
     """Agent for modifying code to fix issues"""
     
-    def __init__(self, llm_provider: str = "anthropic"):
+    def __init__(self, llm_provider: str = "openrouter"):
         self.llm = get_llm(llm_provider, "powerful")
-        self.llm_with_tools = self.llm.bind_tools(ALL_TOOLS)
         
-        self.system_prompt = """You are an expert code modification specialist. Your role is to:
-1. Fix bugs and errors in code
-2. Improve code quality and structure
-3. Add missing imports and dependencies
-4. Ensure code follows best practices
-
-When modifying code:
-- Make minimal, targeted changes
-- Preserve existing functionality
-- Add comments explaining fixes
-- Ensure the code will execute successfully
-- Fix one issue at a time when possible
-
-Always use the write_file_tool to save your modifications."""
+        # Combine standard tools with MCP tools
+        all_tools = ALL_TOOLS.copy()
+        try:
+            mcp_tools = get_mcp_tools_sync()
+            if mcp_tools:
+                all_tools.extend(mcp_tools)
+                print(f"✅ CodeModifierAgent: Added {len(mcp_tools)} MCP tools")
+        except Exception as e:
+            print(f"⚠️  CodeModifierAgent: Could not load MCP tools: {e}")
+        
+        self.llm_with_tools = self.llm.bind_tools(all_tools)
+        self.system_prompt = MODIFIER_SYSTEM_PROMPT
 
     def modify(self, state: MultiAgentState) -> Dict[str, Any]:
         """Modify code to fix identified issues"""
@@ -308,24 +268,17 @@ Always use the write_file_tool to save your modifications."""
         issues = state.identified_issues
         error = state.last_error
         
-        context = f"""Current Code:
-```python
-{current_code}
-```
-
-Analysis: {analysis}
-
-Identified Issues:
-{chr(10).join(f'- {issue}' for issue in issues)}
-
-Last Execution Error:
-{error}
-
-Please fix the code to resolve these issues. Write the corrected code to the file: {state.target_file}"""
+        modification_prompt = format_modifier_prompt(
+            file_path=state.target_file,
+            current_code=current_code,
+            analysis=analysis,
+            issues=issues,
+            error=error
+        )
         
         messages = state.messages + [
             SystemMessage(content=self.system_prompt),
-            HumanMessage(content=context)
+            HumanMessage(content=modification_prompt)
         ]
         
         response = self.llm_with_tools.invoke(messages)
@@ -340,7 +293,6 @@ Please fix the code to resolve these issues. Write the corrected code to the fil
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
                 
-                from .tools import get_tool_by_name
                 tool = get_tool_by_name(tool_name)
                 
                 if tool:
@@ -382,8 +334,16 @@ Please fix the code to resolve these issues. Write the corrected code to the fil
 
 
 # Initialize agents (will be created when workflow is built)
-def create_agents(llm_provider: str = "anthropic"):
-    """Create all agent instances"""
+def create_agents(llm_provider: str = "openrouter"):
+    """
+    Create all agent instances
+    
+    Args:
+        llm_provider: LLM provider to use
+        
+    Returns:
+        Dictionary of agent instances
+    """
     return {
         "analyzer": CodeAnalyzerAgent(llm_provider),
         "executor": CodeExecutorAgent(llm_provider),

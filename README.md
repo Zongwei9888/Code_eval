@@ -4,17 +4,63 @@ A sophisticated LangGraph-based system that automatically analyzes, executes, an
 
 ## 🌟 Features
 
-- **Multi-Agent Architecture**: Specialized agents for analysis, execution, and modification
+### Core Architecture
+- **Multi-Agent System**: Specialized agents (Analyzer, Executor, Modifier) built on LangGraph
+- **Memory/Persistence**: Checkpoint-based state management with SQLite or in-memory storage
+- **Thread Management**: Multiple concurrent sessions with thread ID isolation
+- **Streaming Support**: Real-time workflow updates and progress monitoring
+
+### LLM & Tools
+- **Universal LLM Support**: OpenRouter (default), Anthropic, OpenAI, Google, Ollama
+- **MCP Integration**: Full Model Context Protocol support with langchain-mcp-adapters
+- **Rich Toolset**: File operations, code execution, error analysis, MCP tools
+
+### Advanced Features
 - **Iterative Improvement**: Automatically fixes code through multiple attempts
-- **Universal LLM Support**: Works with Anthropic, OpenAI, Google, and Ollama models
-- **MCP Integration**: Ready for Model Context Protocol tool integration
-- **Interactive Mode**: Engage with agents in real-time
-- **Comprehensive Tooling**: File operations, code execution, error analysis
+- **Resume Capability**: Continue from checkpoints after interruptions
 - **Workflow Visualization**: See the agent workflow graphically
+- **Subgraph Support**: Handle complex multi-file scenarios (example included)
+- **Interactive Mode**: Engage with agents in real-time
 
-## 🏗️ Architecture
+### Compliance
+- ✅ Follows [LangGraph Official Patterns](https://docs.langchain.com/oss/python/langgraph/workflows-agents)
+- ✅ Implements [Memory Best Practices](https://docs.langchain.com/oss/python/langgraph/add-memory)
+- ✅ Supports [MCP Tool Integration](https://docs.langchain.com/oss/python/langchain/mcp)
+- ✅ Includes [Subgraph Examples](https://docs.langchain.com/oss/python/langgraph/use-subgraphs)
 
-The system consists of three main agents:
+## 🏗️ Project Structure
+
+```
+Code_Eval/
+├── agent/                          # Agent implementations
+│   ├── code_agents.py              # Analyzer, Executor, Modifier agents
+│   ├── state.py                    # TypedDict state definition (LangGraph)
+│   └── __init__.py
+├── workflow/                       # Workflow orchestration
+│   ├── code_workflow.py            # Basic workflow
+│   ├── code_workflow_improved.py   # With memory/checkpointing
+│   ├── subgraph_example.py         # Multi-file subgraph pattern
+│   └── __init__.py
+├── tools/                          # Tool definitions
+│   ├── code_tools.py               # File ops, execution, analysis
+│   ├── mcp_integration.py          # MCP tool manager
+│   └── __init__.py
+├── prompt/                         # System prompts
+│   ├── system_prompts.py           # Centralized prompts
+│   └── __init__.py
+├── config/                         # Configuration
+│   ├── llm_config.py               # LLM & MCP configs
+│   └── __init__.py
+├── main.py                         # CLI entry point
+├── example_usage.py                # Usage examples
+├── ARCHITECTURE.md                 # Detailed architecture docs
+├── QUICK_START.md                  # Quick start guide
+└── requirements.txt                # Dependencies
+```
+
+## 🤖 Agents
+
+The system consists of three specialized agents:
 
 1. **Code Analyzer Agent** 🔍
    - Analyzes code structure and quality
@@ -91,86 +137,115 @@ pip install -r requirements.txt
 
 3. **Configure API keys:**
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (or use environment variables):
 
 ```bash
-# For Anthropic (Claude)
+# OpenRouter Configuration (Default - Pre-configured)
+OPENROUTER_API_KEY=sk-or-v1-...  # Already set in code
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+# Other LLM Providers (Optional)
 ANTHROPIC_API_KEY=your_api_key_here
-
-# For OpenAI
 OPENAI_API_KEY=your_api_key_here
-
-# For Google (Gemini)
 GOOGLE_API_KEY=your_api_key_here
 
-# MCP Configuration (optional)
-MCP_ENABLED=true
-MCP_SERVER_URL=http://localhost:8000
+# Memory/Checkpointing
+USE_SQLITE_CHECKPOINTER=false  # true for persistent storage
+SQLITE_DB_PATH=checkpoints.db
+
+# MCP Configuration (Optional)
+MCP_ENABLED=false  # true to enable MCP tools
+MCP_SERVER_URL=http://localhost:8000/mcp
+MCP_FILESYSTEM_PATH=/tmp  # For filesystem MCP server
 ```
+
+**Note**: OpenRouter is configured as the default provider and includes the API key in `config/llm_config.py`.
 
 ## 📖 Usage
 
 ### Command Line Interface
 
+#### Validate configuration:
+
+```bash
+python main.py --validate-config
+```
+
 #### Fix a specific file:
 
 ```bash
-python agents/main.py --file path/to/your/script.py
+python main.py --file path/to/your/script.py
 ```
 
 #### Interactive mode:
 
 ```bash
-python agents/main.py --interactive
+python main.py --interactive
 ```
 
 #### Use different LLM provider:
 
 ```bash
+# Use OpenRouter (default)
+python main.py --file script.py --provider openrouter
+
 # Use OpenAI
-python agents/main.py --file script.py --provider openai
+python main.py --file script.py --provider openai
+
+# Use Anthropic
+python main.py --file script.py --provider anthropic
 
 # Use Google Gemini
-python agents/main.py --file script.py --provider google
+python main.py --file script.py --provider google
 
 # Use Ollama (local)
-python agents/main.py --file script.py --provider ollama
+python main.py --file script.py --provider ollama
 ```
 
 #### Customize behavior:
 
 ```bash
 # Set max attempts
-python agents/main.py --file script.py --max-attempts 10
+python main.py --file script.py --max-attempts 10
 
 # Use fast model
-python agents/main.py --file script.py --model-type fast
+python main.py --file script.py --model-type fast
 
 # Stream updates
-python agents/main.py --file script.py --stream
+python main.py --file script.py --stream
 
 # Verbose output
-python agents/main.py --file script.py --verbose
+python main.py --file script.py --verbose
 ```
 
 #### Visualize workflow:
 
 ```bash
-python agents/main.py --visualize workflow_graph.png
+python main.py --visualize workflow_graph.png
 ```
 
 ### Programmatic Usage
 
 ```python
-from agents import create_workflow
+from workflow import create_workflow
+from main import quick_fix
 
-# Create workflow
-workflow = create_workflow(llm_provider="anthropic", max_attempts=5)
+# Method 1: Quick fix
+result = quick_fix("path/to/script.py", provider="openrouter", max_attempts=5)
 
-# Run on a file
+# Method 2: Create workflow with memory
+workflow = create_workflow(
+    llm_provider="openrouter",
+    max_attempts=5,
+    use_sqlite=True,  # Enable persistent checkpointing
+    sqlite_path="checkpoints.db"
+)
+
+# Run on a file with thread ID
 result = workflow.run(
     file_path="path/to/script.py",
-    initial_code="print('Hello, World!')"
+    initial_code="print('Hello, World!')",
+    thread_id="session_001"  # For session management
 )
 
 # Check results
@@ -178,18 +253,27 @@ if result["execution_success"]:
     print("✅ Code fixed successfully!")
 else:
     print("⚠️ Could not fix code completely")
+
+# Resume from checkpoint (if interrupted)
+resumed_result = workflow.resume(thread_id="session_001")
+
+# Stream updates in real-time
+for update in workflow.stream_run("script.py", thread_id="session_002"):
+    print(f"State update: {update}")
 ```
 
 ### Interactive Session
 
 ```python
-from agents import interactive_session
+from workflow import interactive_session
 
 # Start interactive mode
-interactive_session(llm_provider="anthropic")
+interactive_session(llm_provider="openrouter")
 ```
 
 ## 🛠️ Tools Available
+
+### Built-in Tools
 
 The agents have access to the following tools:
 
@@ -199,19 +283,38 @@ The agents have access to the following tools:
   - `list_files_tool`: List directory contents
 
 - **Code Execution**:
-  - `execute_python_code`: Execute code snippets
-  - `execute_file`: Execute Python files
+  - `execute_python_code`: Execute code snippets safely
+  - `execute_file`: Execute Python files with timeout
 
 - **Analysis**:
-  - `analyze_error`: Analyze error messages
-  - `search_code`: Search for terms in code
+  - `analyze_error`: Parse and suggest fixes for errors
+  - `search_code`: Search for terms in codebase
 
-- **MCP Integration**:
-  - `call_mcp_tool`: Call external MCP tools
+### MCP Tool Integration
+
+When enabled (`MCP_ENABLED=true`), agents automatically gain access to:
+
+- **Filesystem MCP Server**: File system operations
+- **Custom MCP Servers**: Any MCP-compatible tool server
+- **HTTP/STDIO Transports**: Flexible connectivity options
+
+```bash
+# Enable MCP in .env
+MCP_ENABLED=true
+MCP_SERVER_URL=http://localhost:8000/mcp
+```
+
+Agents will automatically:
+1. Connect to configured MCP servers
+2. Retrieve available tools
+3. Bind tools to LLM for use
+4. Execute tools as needed
+
+Reference: [LangChain MCP Documentation](https://docs.langchain.com/oss/python/langchain/mcp)
 
 ## 🔧 Configuration
 
-Edit `agents/config.py` to customize:
+Edit `config/llm_config.py` to customize:
 
 - Default model providers
 - Model mappings
@@ -220,26 +323,32 @@ Edit `agents/config.py` to customize:
 
 ```python
 # Example configuration
-DEFAULT_MODEL_PROVIDER = "anthropic"
+DEFAULT_PROVIDER = "openrouter"
+DEFAULT_MODEL = "gpt-4o"
 MAX_EXECUTION_ATTEMPTS = 5
 EXECUTION_TIMEOUT = 30  # seconds
+
+# OpenRouter configuration (pre-configured)
+OPENROUTER_API_KEY = "sk-or-v1-..."
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 ```
 
 ## 📊 Supported LLM Providers
 
-| Provider | Models | API Key Required |
-|----------|--------|------------------|
-| Anthropic | Claude 3.5 Sonnet, Opus, Haiku | Yes |
-| OpenAI | GPT-4, GPT-3.5 Turbo | Yes |
-| Google | Gemini 1.5 Pro, Flash | Yes |
-| Ollama | Llama 3.1, Custom models | No (local) |
+| Provider | Models | API Key Required | Default |
+|----------|--------|------------------|---------|
+| OpenRouter | GPT-4o, GPT-3.5 Turbo, Many others | Yes | ✅ |
+| Anthropic | Claude 3.5 Sonnet, Opus, Haiku | Yes | |
+| OpenAI | GPT-4, GPT-3.5 Turbo | Yes | |
+| Google | Gemini 1.5 Pro, Flash | Yes | |
+| Ollama | Llama 3.1, Custom models | No (local) | |
 
 ## 🎯 Example Use Cases
 
 ### 1. Fix Syntax Errors
 
 ```bash
-python agents/main.py --file buggy_script.py
+python main.py --file buggy_script.py
 ```
 
 The system will:
@@ -250,7 +359,7 @@ The system will:
 ### 2. Add Missing Imports
 
 ```bash
-python agents/main.py --file incomplete_code.py
+python main.py --file incomplete_code.py
 ```
 
 The system will:
@@ -261,13 +370,25 @@ The system will:
 ### 3. Debug Runtime Errors
 
 ```bash
-python agents/main.py --file error_prone.py
+python main.py --file error_prone.py
 ```
 
 The system will:
 - Execute the code
 - Capture runtime errors
 - Apply fixes iteratively
+
+### 4. Run Examples
+
+```bash
+python example_usage.py
+```
+
+View various usage examples including:
+- Basic LLM initialization
+- Tool definitions
+- Workflow usage
+- Configuration validation
 
 ## 🧪 Testing
 

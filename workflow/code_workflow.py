@@ -4,16 +4,17 @@ Implements iterative analyze -> execute -> modify loop until code works
 """
 from typing import Literal, Dict, Any
 from langgraph.graph import StateGraph, START, END
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 
-from .code_agents import (
+from agent import (
     MultiAgentState,
     CodeAnalyzerAgent,
     CodeExecutorAgent,
     CodeModifierAgent,
     create_agents
 )
-from .config import MAX_EXECUTION_ATTEMPTS
+from config import MAX_EXECUTION_ATTEMPTS
+from prompt import format_workflow_start_prompt
 
 
 class CodeImprovementWorkflow:
@@ -29,7 +30,7 @@ class CodeImprovementWorkflow:
     6. modify_code -> analyze_code: Re-analyze after modification
     """
     
-    def __init__(self, llm_provider: str = "anthropic", max_attempts: int = MAX_EXECUTION_ATTEMPTS):
+    def __init__(self, llm_provider: str = "openrouter", max_attempts: int = MAX_EXECUTION_ATTEMPTS):
         self.llm_provider = llm_provider
         self.max_attempts = max_attempts
         self.agents = create_agents(llm_provider)
@@ -177,9 +178,10 @@ class CodeImprovementWorkflow:
         print(f"LLM Provider: {self.llm_provider}")
         
         # Initialize state
+        start_prompt = format_workflow_start_prompt(file_path)
         initial_state = MultiAgentState(
             messages=[
-                HumanMessage(content=f"Improve the code in {file_path} until it executes successfully.")
+                HumanMessage(content=start_prompt)
             ],
             target_file=file_path,
             file_content=initial_code,
@@ -218,9 +220,10 @@ class CodeImprovementWorkflow:
         print(f"🚀 Starting Code Improvement Workflow (Streaming)")
         print(f"{'='*80}")
         
+        start_prompt = format_workflow_start_prompt(file_path)
         initial_state = MultiAgentState(
             messages=[
-                HumanMessage(content=f"Improve the code in {file_path} until it executes successfully.")
+                HumanMessage(content=start_prompt)
             ],
             target_file=file_path,
             file_content=initial_code,
@@ -259,7 +262,7 @@ class CodeImprovementWorkflow:
             print(f"⚠️  Could not generate graph: {str(e)}")
 
 
-def create_workflow(llm_provider: str = "anthropic", max_attempts: int = MAX_EXECUTION_ATTEMPTS):
+def create_workflow(llm_provider: str = "openrouter", max_attempts: int = MAX_EXECUTION_ATTEMPTS):
     """
     Factory function to create workflow
     
@@ -274,7 +277,7 @@ def create_workflow(llm_provider: str = "anthropic", max_attempts: int = MAX_EXE
 
 
 # Interactive mode functions
-def interactive_session(llm_provider: str = "anthropic"):
+def interactive_session(llm_provider: str = "openrouter"):
     """
     Start an interactive session with the workflow
     Allows user to submit files and see results in real-time

@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from .workflow import create_workflow, interactive_session
-from .config import MODEL_MAPPINGS
+from workflow import create_workflow, interactive_session
+from config import MODEL_MAPPINGS, validate_config
 
 
 def main():
@@ -32,6 +32,9 @@ Examples:
   
   # Use fast model
   python main.py --file script.py --model-type fast
+  
+  # Validate configuration
+  python main.py --validate-config
         """
     )
     
@@ -54,8 +57,8 @@ Examples:
         "--provider", "-p",
         type=str,
         choices=list(MODEL_MAPPINGS.keys()),
-        default="anthropic",
-        help="LLM provider to use (default: anthropic)"
+        default="openrouter",
+        help="LLM provider to use (default: openrouter)"
     )
     
     parser.add_argument(
@@ -94,12 +97,25 @@ Examples:
         help="Generate workflow graph visualization"
     )
     
+    # Configuration validation
+    parser.add_argument(
+        "--validate-config",
+        action="store_true",
+        help="Validate and display configuration"
+    )
+    
     args = parser.parse_args()
     
+    # Validate configuration if requested
+    if args.validate_config:
+        validate_config()
+        if not args.file and not args.interactive:
+            return
+    
     # Validate arguments
-    if not args.interactive and not args.file and not args.visualize:
+    if not args.interactive and not args.file and not args.visualize and not args.validate_config:
         parser.print_help()
-        print("\n❌ Error: Please specify --file, --interactive, or --visualize")
+        print("\n❌ Error: Please specify --file, --interactive, --visualize, or --validate-config")
         sys.exit(1)
     
     # Create workflow
@@ -179,7 +195,7 @@ Examples:
         sys.exit(1)
 
 
-def quick_fix(file_path: str, provider: str = "anthropic", max_attempts: int = 5) -> dict:
+def quick_fix(file_path: str, provider: str = "openrouter", max_attempts: int = 5) -> dict:
     """
     Quick fix function for programmatic use
     
@@ -191,8 +207,6 @@ def quick_fix(file_path: str, provider: str = "anthropic", max_attempts: int = 5
     Returns:
         Result dictionary
     """
-    from pathlib import Path
-    
     workflow = create_workflow(llm_provider=provider, max_attempts=max_attempts)
     
     path = Path(file_path)

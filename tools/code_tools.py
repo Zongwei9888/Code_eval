@@ -1,6 +1,6 @@
 """
 Tools for multi-agent coding assistant
-Includes file operations, code execution, and MCP integration
+Includes file operations, code execution, and analysis tools
 """
 import os
 import subprocess
@@ -11,7 +11,6 @@ from pathlib import Path
 import tempfile
 import traceback
 from langchain.tools import tool
-from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 
@@ -312,7 +311,7 @@ def call_mcp_tool(tool_name: str, parameters: str) -> str:
         Result from MCP tool
     """
     try:
-        from .config import MCP_ENABLED, MCP_SERVER_URL
+        from config import MCP_ENABLED, MCP_SERVER_URL
         
         if not MCP_ENABLED:
             return "MCP integration is disabled. Set MCP_ENABLED=true to enable."
@@ -349,7 +348,15 @@ ALL_TOOLS = [
 
 
 def get_tool_by_name(tool_name: str):
-    """Get tool by name"""
+    """
+    Get tool by name from the tool collection
+    
+    Args:
+        tool_name: Name of the tool to retrieve
+        
+    Returns:
+        Tool instance or None if not found
+    """
     for tool in ALL_TOOLS:
         if tool.name == tool_name:
             return tool
