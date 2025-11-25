@@ -17,13 +17,16 @@ sys.path.insert(0, str(Path(__file__).parent))
 import gradio as gr
 
 # Single file workflow
-from workflow.code_workflow_improved import create_workflow
+from workflow import create_workflow
 
-# Repo workflow (new multi-agent system with feedback loops)
-from agent.multi_agent_system import create_multi_agent_workflow, ALL_TOOLS as ALL_REPO_TOOLS
+# Repo workflow (multi-agent system with feedback loops)
+from workflow import create_multi_agent_workflow
 
-# Local utilities
-from agent.repo_agents import quick_scan
+# Local utilities (non-LLM based)
+from agent import quick_scan
+
+# Tools (for reference)
+from tools import ALL_REPO_TOOLS
 
 from config import DEFAULT_PROVIDER, MODEL_MAPPINGS
 
@@ -251,35 +254,35 @@ def run_quick_scan(project_name: str):
         
         # Details card
         details = f'''
-        <div style="background: #0d1117; padding: 20px; border-radius: 12px; border: 1px solid #30363d;">
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px;">
-                <div style="background: #161b22; padding: 12px; border-radius: 8px; text-align: center;">
-                    <div style="color: #7ee787; font-size: 24px; font-weight: bold;">{result['total_files']}</div>
-                    <div style="color: #8b949e; font-size: 11px;">PYTHON FILES</div>
+        <div class="card-container" style="padding: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 15px;">
+                <div class="metric-box">
+                    <div class="metric-val" style="color: var(--success);">{result['total_files']}</div>
+                    <div class="metric-label">PYTHON FILES</div>
                 </div>
-                <div style="background: #161b22; padding: 12px; border-radius: 8px; text-align: center;">
-                    <div style="color: {'#f85149' if has_errors else '#7ee787'}; font-size: 24px; font-weight: bold;">{result['files_with_syntax_errors']}</div>
-                    <div style="color: #8b949e; font-size: 11px;">SYNTAX ERRORS</div>
+                <div class="metric-box">
+                    <div class="metric-val" style="color: {'var(--error)' if has_errors else 'var(--success)'};">{result['files_with_syntax_errors']}</div>
+                    <div class="metric-label">SYNTAX ERRORS</div>
                 </div>
-                <div style="background: #161b22; padding: 12px; border-radius: 8px; text-align: center;">
-                    <div style="color: #58a6ff; font-size: 24px; font-weight: bold;">{'YES' if result['has_tests'] else 'NO'}</div>
-                    <div style="color: #8b949e; font-size: 11px;">HAS TESTS</div>
+                <div class="metric-box">
+                    <div class="metric-val" style="color: var(--primary);">{ 'YES' if result['has_tests'] else 'NO' }</div>
+                    <div class="metric-label">HAS TESTS</div>
                 </div>
             </div>
         '''
         
         if result["syntax_errors"]:
-            details += '<div style="color: #f85149; font-size: 12px; margin-bottom: 8px; font-weight: bold;">SYNTAX ERRORS:</div>'
+            details += '<div style="color: var(--error); font-size: 12px; margin-bottom: 8px; font-weight: 600;">SYNTAX ERRORS:</div>'
             for err in result["syntax_errors"][:5]:
                 errs = "; ".join(err["errors"][:2])
                 details += f'''
-                <div style="background: #21262d; padding: 8px; margin: 4px 0; border-radius: 6px; border-left: 3px solid #f85149;">
-                    <div style="color: #f0f6fc; font-size: 11px; font-family: monospace;">{err["file"]}</div>
-                    <div style="color: #f85149; font-size: 10px;">{errs}</div>
+                <div style="background: rgba(248, 81, 73, 0.1); padding: 8px; margin: 4px 0; border-radius: 6px; border-left: 3px solid var(--error);">
+                    <div style="color: #e2e8f0; font-size: 11px; font-family: monospace;">{err["file"]}</div>
+                    <div style="color: var(--error); font-size: 10px;">{errs}</div>
                 </div>
                 '''
         else:
-            details += '<div style="color: #7ee787; text-align: center; padding: 20px;">All files have valid syntax!</div>'
+            details += '<div style="color: var(--success); text-align: center; padding: 20px;">All files have valid syntax!</div>'
         
         details += '</div>'
         
@@ -400,39 +403,37 @@ def run_repo_analysis(project_name: str, provider: str):
         exec_success = final_state.get("last_execution_success", False) if final_state else False
         fix_attempts = final_state.get("fix_attempts", 0) if final_state else 0
         
-        status_color = "#7ee787" if exec_success else "#d29922"
+        status_color = "var(--success)" if exec_success else "var(--warning)"
         status_text = "SUCCESS" if exec_success else f"INCOMPLETE ({fix_attempts} fixes)"
         
         # Create report
         report = f'''
-        <div style="background: #0d1117; padding: 20px; border-radius: 12px; border: 1px solid #30363d;">
-            <div style="color: {status_color}; font-size: 18px; text-align: center; margin-bottom: 15px; font-weight: bold;">
+        <div class="card-container" style="padding: 20px;">
+            <div style="color: {status_color}; font-size: 18px; text-align: center; margin-bottom: 15px; font-weight: 700;">
                 {status_text}
             </div>
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-                <div style="background: #161b22; padding: 12px; border-radius: 8px; text-align: center;">
-                    <div style="color: #7ee787; font-size: 20px; font-weight: bold;">{step_count}</div>
-                    <div style="color: #8b949e; font-size: 10px;">STEPS</div>
+                <div class="metric-box">
+                    <div class="metric-val" style="color: var(--success);">{step_count}</div>
+                    <div class="metric-label">STEPS</div>
                 </div>
-                <div style="background: #161b22; padding: 12px; border-radius: 8px; text-align: center;">
-                    <div style="color: #58a6ff; font-size: 20px; font-weight: bold;">{len(agents_seen)}</div>
-                    <div style="color: #8b949e; font-size: 10px;">AGENTS</div>
+                <div class="metric-box">
+                    <div class="metric-val" style="color: var(--primary);">{len(agents_seen)}</div>
+                    <div class="metric-label">AGENTS</div>
                 </div>
-                <div style="background: #161b22; padding: 12px; border-radius: 8px; text-align: center;">
-                    <div style="color: #a371f7; font-size: 20px; font-weight: bold;">{llm_calls}</div>
-                    <div style="color: #8b949e; font-size: 10px;">LLM CALLS</div>
+                <div class="metric-box">
+                    <div class="metric-val" style="color: var(--llm);">{llm_calls}</div>
+                    <div class="metric-label">LLM CALLS</div>
                 </div>
-                <div style="background: #161b22; padding: 12px; border-radius: 8px; text-align: center;">
-                    <div style="color: #f78166; font-size: 20px; font-weight: bold;">{tool_calls}</div>
-                    <div style="color: #8b949e; font-size: 10px;">TOOLS</div>
+                <div class="metric-box">
+                    <div class="metric-val" style="color: var(--tool);">{tool_calls}</div>
+                    <div class="metric-label">TOOLS</div>
                 </div>
             </div>
-            <div style="margin-top: 15px; padding: 10px; background: #161b22; border-radius: 8px;">
-                <div style="color: #8b949e; font-size: 11px;">
-                    <div>Project: {project_name}</div>
-                    <div>Fix Attempts: {fix_attempts}</div>
-                    <div>Agents: {", ".join(sorted(agents_seen))}</div>
-                </div>
+            <div style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; font-size: 11px; color: #94a3b8;">
+                <div>Project: <span style="color: #e2e8f0;">{project_name}</span></div>
+                <div>Fix Attempts: <span style="color: #e2e8f0;">{fix_attempts}</span></div>
+                <div>Agents: <span style="color: #e2e8f0;">{", ".join(sorted(agents_seen))}</span></div>
             </div>
         </div>
         '''
@@ -447,81 +448,80 @@ def run_repo_analysis(project_name: str, provider: str):
 
 
 # ============================================================================
-# HTML COMPONENTS
+# HTML COMPONENTS (MODERN THEME)
 # ============================================================================
 
 def create_status(status: str, title: str, subtitle: str) -> str:
-    colors = {
-        "success": ("#7ee787", "#238636"),
-        "warning": ("#d29922", "#9e6a03"),
-        "error": ("#f85149", "#da3633"),
-        "running": ("#58a6ff", "#1f6feb"),
-        "idle": ("#8b949e", "#484f58")
+    status_map = {
+        "success": ("var(--success)", "[OK]"),
+        "warning": ("var(--warning)", "[!]"),
+        "error": ("var(--error)", "[X]"),
+        "running": ("var(--primary)", "[~]"),
+        "idle": ("#64748b", "[-]")
     }
-    text_color, bg_color = colors.get(status, colors["idle"])
-    icons = {"success": "[OK]", "warning": "[!]", "error": "[X]", "running": "[~]", "idle": "[-]"}
-    icon = icons.get(status, "[-]")
+    color, icon = status_map.get(status, status_map["idle"])
+    
+    # Convert var to actual color or handle opacity via style override
+    style = f"border: 1px solid {color}; background: rgba(255,255,255,0.03);"
+    if "var" in color:
+        # Let CSS handle it mostly, but inject color for border
+        pass
     
     return f'''
-    <div style="background: linear-gradient(135deg, {bg_color}22 0%, {bg_color}11 100%); 
-                border: 1px solid {bg_color}; border-radius: 12px; padding: 20px; text-align: center;">
-        <div style="color: {text_color}; font-size: 24px; font-weight: bold;">{icon} {title}</div>
-        <div style="color: #8b949e; font-size: 12px; margin-top: 5px;">{subtitle}</div>
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid {color}; 
+                border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 15px;">
+        <div style="color: {color}; font-size: 24px; font-weight: 700;">{icon}</div>
+        <div>
+            <div style="color: var(--text-primary); font-size: 16px; font-weight: 600;">{title}</div>
+            <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">{subtitle}</div>
+        </div>
     </div>
     '''
 
 
 def create_mini(status: str, message: str) -> str:
-    colors = {"success": "#7ee787", "error": "#f85149", "warning": "#d29922"}
-    return f'<div style="color: {colors.get(status, "#8b949e")}; font-size: 12px; padding: 5px;">{message}</div>'
+    colors = {"success": "var(--success)", "error": "var(--error)", "warning": "var(--warning)"}
+    return f'<div style="color: {colors.get(status, "#94a3b8")}; font-size: 12px; padding: 5px; font-weight: 500;">{message}</div>'
 
 
 def create_chat_bubble(role: str, content: str, turn: int = 0, has_tools: bool = False, tool_name: str = "") -> str:
-    """Create a chat-style bubble for messages"""
+    """Create a sleek chat bubble"""
     
-    # Role styles
-    role_styles = {
-        "llm": ("#a371f7", "#a371f722", "LLM", "left"),
-        "scanner": ("#58a6ff", "#58a6ff22", "SCANNER", "left"),
-        "analyzer": ("#d29922", "#d2992222", "ANALYZER", "left"),
-        "fixer": ("#7ee787", "#7ee78722", "FIXER", "left"),
-        "executor": ("#79c0ff", "#79c0ff22", "EXECUTOR", "left"),
-        "reporter": ("#a371f7", "#a371f722", "REPORTER", "left"),
-        "tool": ("#f78166", "#f7816622", "TOOL", "right"),
-        "error": ("#f85149", "#f8514922", "ERROR", "left"),
-        "system": ("#8b949e", "#8b949e22", "SYSTEM", "center"),
+    # Modern Palette
+    styles = {
+        "llm":      ("var(--llm)",      "left"),
+        "scanner":  ("var(--scanner)",  "left"),
+        "analyzer": ("var(--analyzer)", "left"),
+        "fixer":    ("var(--fixer)",    "left"),
+        "executor": ("var(--executor)", "left"),
+        "reporter": ("var(--reporter)", "left"),
+        "tool":     ("var(--tool)",     "right"),
+        "error":    ("var(--error)",    "left"),
+        "system":   ("#64748b",         "center"),
     }
     
-    color, bg, label, align = role_styles.get(role.lower(), ("#c9d1d9", "transparent", role.upper(), "left"))
+    color, align = styles.get(role.lower(), ("#94a3b8", "left"))
     
-    # Escape HTML in content
     content_escaped = content.replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
     
-    # Turn indicator
-    turn_html = f'<span style="color: #484f58; font-size: 9px;">T{turn}</span>' if turn > 0 else ""
+    turn_badge = f'<span class="turn-badge">T{turn}</span>' if turn > 0 else ""
+    tool_badge = f'<span class="tool-badge">TOOLS</span>' if has_tools else ""
+    tool_name_span = f'<span style="color: #60a5fa; font-size: 11px; margin-left: 8px;">{tool_name}</span>' if tool_name else ""
     
-    # Tool indicator
-    tool_html = f'<span style="color: #d29922; font-size: 9px; margin-left: 5px;">&#8594; tools</span>' if has_tools else ""
-    
-    # Tool name for tool messages
-    tool_name_html = f'<span style="color: #58a6ff; font-size: 10px;">{tool_name}</span> ' if tool_name else ""
-    
-    margin = "margin-left: auto;" if align == "right" else ("margin: 0 auto;" if align == "center" else "")
-    max_width = "85%" if align != "center" else "95%"
+    is_right = align == "right"
+    container_class = "chat-bubble-right" if is_right else ("chat-bubble-center" if align == "center" else "chat-bubble-left")
     
     return f'''
-    <div style="display: flex; margin: 8px 0;">
-        <div style="background: {bg}; border: 1px solid {color}44; border-radius: 12px; 
-                    padding: 10px 14px; max-width: {max_width}; {margin}">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; border-bottom: 1px solid {color}33; padding-bottom: 6px;">
-                <span style="background: {color}; color: #0d1117; padding: 2px 8px; border-radius: 4px; 
-                            font-size: 10px; font-weight: bold;">{label}</span>
-                {turn_html}
-                {tool_html}
-                {tool_name_html}
+    <div class="chat-row {align}">
+        <div class="chat-bubble {container_class}" style="border-left: 3px solid {color};">
+            <div class="chat-header">
+                <span style="color: {color}; font-weight: 700; font-size: 11px; text-transform: uppercase;">{role}</span>
+                {turn_badge}
+                {tool_badge}
+                {tool_name_span}
             </div>
-            <div style="color: #c9d1d9; font-size: 12px; line-height: 1.5; word-wrap: break-word;">
-                {content_escaped[:600]}{"..." if len(content) > 600 else ""}
+            <div class="chat-content">
+                {content_escaped[:800]}{"..." if len(content) > 800 else ""}
             </div>
         </div>
     </div>
@@ -529,39 +529,35 @@ def create_chat_bubble(role: str, content: str, turn: int = 0, has_tools: bool =
 
 
 def create_step_header(step: int, agent: str) -> str:
-    """Create a step header divider"""
     agent_colors = {
-        "scanner": "#58a6ff",
-        "analyzer": "#d29922",
-        "fixer": "#7ee787",
-        "executor": "#79c0ff",
-        "reporter": "#a371f7",
+        "scanner": "var(--scanner)",
+        "analyzer": "var(--analyzer)",
+        "fixer": "var(--fixer)",
+        "executor": "var(--executor)",
+        "reporter": "var(--reporter)",
     }
-    color = agent_colors.get(agent.lower(), "#58a6ff")
+    color = agent_colors.get(agent.lower(), "var(--primary)")
     
     return f'''
-    <div style="display: flex; align-items: center; margin: 15px 0 10px 0;">
-        <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, {color}66);"></div>
-        <div style="background: {color}22; border: 1px solid {color}44; padding: 4px 12px; border-radius: 6px; margin: 0 10px;">
-            <span style="color: {color}; font-size: 11px; font-weight: bold;">STEP {step}</span>
-            <span style="color: #8b949e; font-size: 11px;"> | </span>
-            <span style="color: {color}; font-size: 11px;">{agent.upper()}</span>
+    <div class="step-divider">
+        <div class="line" style="background: linear-gradient(90deg, transparent, {color}66);"></div>
+        <div class="badge" style="border-color: {color}44; background: {color}11;">
+            <span style="color: {color}; font-weight: 700;">STEP {step}</span>
+            <span style="color: #64748b;"> | </span>
+            <span style="color: {color};">{agent.upper()}</span>
         </div>
-        <div style="flex: 1; height: 1px; background: linear-gradient(90deg, {color}66, transparent);"></div>
+        <div class="line" style="background: linear-gradient(90deg, {color}66, transparent);"></div>
     </div>
     '''
 
 
 def create_logs(logs: List[str]) -> str:
-    """Create styled log container with chat-like messages"""
     html = ""
     current_step = 0
     
-    for log in logs[-50:]:
-        # Check for step markers
+    for log in logs[-60:]: # Show more logs
         if "Step " in log and ":" in log:
             try:
-                # Extract step number and agent
                 parts = log.split("Step ")[1].split(":")
                 step_num = int(parts[0].strip())
                 if step_num != current_step:
@@ -569,21 +565,18 @@ def create_logs(logs: List[str]) -> str:
                     agent = parts[1].strip().replace("[", "").replace("]", "").split()[0] if len(parts) > 1 else "AGENT"
                     html += create_step_header(step_num, agent)
                 continue
-            except:
-                pass
+            except: pass
         
-        # Parse different log types
         if "[ERROR]" in log or "Error:" in log:
             content = log.split("]", 1)[-1].strip() if "]" in log else log
             html += create_chat_bubble("error", content)
         elif "[OK]" in log or "SUCCESS" in log:
             content = log.split("]", 1)[-1].strip() if "]" in log else log
-            html += f'<div style="color: #7ee787; font-size: 11px; padding: 4px 10px; margin: 4px 0; background: #7ee78711; border-radius: 6px; text-align: center;">{content}</div>'
+            html += f'<div class="log-item success"><span>✓</span> {content}</div>'
         elif "[WARN]" in log:
             content = log.split("]", 1)[-1].strip() if "]" in log else log
-            html += f'<div style="color: #d29922; font-size: 11px; padding: 4px 10px; margin: 4px 0; background: #d2992211; border-radius: 6px;">{content}</div>'
+            html += f'<div class="log-item warning"><span>!</span> {content}</div>'
         elif log.strip().startswith("[") and "] Turn" in log:
-            # Agent message with turn
             try:
                 agent = log.split("[")[1].split("]")[0]
                 turn = int(log.split("Turn ")[1].split(":")[0])
@@ -591,58 +584,52 @@ def create_logs(logs: List[str]) -> str:
                 has_tools = "-> Will call tools" in log or "tools" in content.lower()
                 html += create_chat_bubble(agent.lower(), content, turn, has_tools)
             except:
-                html += f'<div style="color: #c9d1d9; font-size: 11px; padding: 2px 8px;">{log}</div>'
+                html += f'<div class="log-item info">{log}</div>'
         elif "[Tool]" in log:
-            # Tool call
             try:
                 parts = log.split("[Tool]")[1].strip()
                 tool_name = parts.split(":")[0].strip()
                 result = parts.split(":", 1)[1].strip() if ":" in parts else ""
                 html += create_chat_bubble("tool", result, tool_name=tool_name)
             except:
-                html += f'<div style="color: #f78166; font-size: 11px; padding: 2px 8px;">{log}</div>'
+                html += f'<div class="log-item tool">{log}</div>'
         elif "[INFO]" in log:
             content = log.split("]", 1)[-1].strip() if "]" in log else log
-            html += f'<div style="color: #58a6ff; font-size: 10px; padding: 3px 10px; margin: 2px 0;">{content}</div>'
+            html += f'<div class="log-item info">{content}</div>'
         elif log.strip().startswith("[!]"):
             content = log.replace("[!]", "").strip()
-            html += f'<div style="color: #f85149; font-size: 11px; padding: 4px 10px; margin: 4px 0; background: #f8514911; border-radius: 6px; border-left: 3px solid #f85149;">{content}</div>'
+            html += f'<div class="log-item error"><span>!</span> {content}</div>'
         elif log.strip():
-            # Default log style
-            html += f'<div style="color: #8b949e; font-size: 10px; padding: 2px 8px; font-family: monospace;">{log}</div>'
+            html += f'<div class="log-item dim">{log}</div>'
     
     return f'''
-    <div style="background: linear-gradient(180deg, #0d1117 0%, #161b22 100%); 
-                padding: 15px; border-radius: 12px; border: 1px solid #30363d; 
-                height: 450px; overflow-y: auto; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-            {html if html else '<div style="color: #484f58; text-align: center; padding: 20px;">Waiting for agent activity...</div>'}
+    <div class="log-container">
+        <div class="log-scroll-area">
+            {html if html else '<div class="empty-state">Ready for analysis...</div>'}
         </div>
     </div>
     '''
 
 
 def create_tree(project_path: Path) -> str:
-    html = '''<div style="background: #0d1117; padding: 15px; border-radius: 10px; border: 1px solid #30363d; 
-                         font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto;">'''
+    html = '<div class="file-tree">'
     
     def add_items(path: Path, indent: int = 0):
         nonlocal html
-        prefix = "&nbsp;" * (indent * 3)
+        prefix = '<span class="indent"></span>' * indent
         try:
             items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name))
             for item in items[:50]:
                 if item.name.startswith('.') or item.name == '__pycache__':
                     continue
                 if item.is_dir():
-                    html += f'<div style="color: #58a6ff;">{prefix}[+] {item.name}/</div>'
+                    html += f'<div class="tree-item dir">{prefix}📁 {item.name}</div>'
                     if indent < 2:
                         add_items(item, indent + 1)
                 else:
-                    color = "#7ee787" if item.suffix == ".py" else "#8b949e"
-                    html += f'<div style="color: {color};">{prefix}    {item.name}</div>'
-        except:
-            pass
+                    icon = "🐍" if item.suffix == ".py" else "📄"
+                    html += f'<div class="tree-item file">{prefix}{icon} {item.name}</div>'
+        except: pass
     
     add_items(project_path)
     html += '</div>'
@@ -654,195 +641,359 @@ def create_tree(project_path: Path) -> str:
 # ============================================================================
 
 def create_ui():
-    # Get initial data
+    # CSS Variables & Global Styles
+    css = """
+    :root {
+        --bg-dark: #09090b;
+        --bg-card: #18181b;
+        --bg-input: #27272a;
+        --border-color: #3f3f46;
+        
+        /* High Contrast Text */
+        --text-primary: #f8fafc;   /* Slate-50 */
+        --text-secondary: #cbd5e1; /* Slate-300 */
+        --text-dim: #94a3b8;       /* Slate-400 */
+        
+        --primary: #3b82f6;    /* Blue */
+        --success: #10b981;    /* Emerald */
+        --warning: #f59e0b;    /* Amber */
+        --error: #ef4444;      /* Red */
+        
+        /* Agent Colors */
+        --llm: #8b5cf6;        /* Violet */
+        --scanner: #06b6d4;    /* Cyan */
+        --analyzer: #f59e0b;   /* Amber */
+        --fixer: #10b981;      /* Emerald */
+        --executor: #3b82f6;   /* Blue */
+        --reporter: #d946ef;   /* Fuchsia */
+        --tool: #f97316;       /* Orange */
+    }
+
+    /* FORCE DARK MODE EVERYTHING */
+    body, .gradio-container, .gradio-container * {
+        background-color: var(--bg-dark) !important;
+        color: var(--text-primary) !important;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    }
+
+    /* Override Gradio Components specifically to fix white backgrounds */
+    
+    /* Inputs, Textareas, Dropdowns */
+    textarea, input, .gr-input, .gr-text-input, .gr-box {
+        background-color: var(--bg-input) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--text-primary) !important;
+    }
+    
+    /* Dropdown specific fixes */
+    .wrap-inner, .single-select, .selector-head, .selector-item, ul.options {
+        background-color: var(--bg-input) !important;
+        color: var(--text-primary) !important;
+        border-color: var(--border-color) !important;
+    }
+    
+    /* Buttons */
+    button {
+        background-color: var(--bg-card) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--text-primary) !important;
+    }
+    button.primary {
+        background: linear-gradient(135deg, var(--primary) 0%, #2563eb 100%) !important;
+        border: none !important;
+        color: white !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    /* Panels and Boxes */
+    .block, .panel, .tabs {
+        background-color: transparent !important;
+        border: none !important;
+    }
+    
+    /* Tab Headers */
+    .tab-nav {
+        background-color: var(--bg-dark) !important;
+        border-bottom: 1px solid var(--border-color) !important;
+    }
+    .tab-nav button {
+        background: transparent !important;
+        border: none !important;
+        color: var(--text-secondary) !important;
+    }
+    .tab-nav button.selected {
+        color: var(--primary) !important;
+        border-bottom: 2px solid var(--primary) !important;
+    }
+
+    /* Code Editor Fixes */
+    .cm-editor, .cm-scroller, .cm-gutters {
+        background-color: #0d1117 !important;
+        color: #e6edf3 !important;
+    }
+    .cm-line { color: #e6edf3 !important; }
+
+    /* --- CUSTOM COMPONENTS --- */
+
+    /* Card Containers */
+    .card-container {
+        background-color: var(--bg-card) !important;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+    }
+    
+    /* Metric Boxes */
+    .metric-box {
+        background: rgba(255,255,255,0.03) !important;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+    .metric-val { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary) !important; }
+    .metric-label { font-size: 10px; color: var(--text-dim) !important; letter-spacing: 1px; }
+
+    /* Chat/Log Styles */
+    .log-container {
+        background: #0c0e11 !important;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        height: 500px;
+        position: relative;
+        overflow: hidden;
+    }
+    .log-scroll-area {
+        height: 100%;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .empty-state {
+        color: var(--text-dim) !important;
+        text-align: center;
+        margin-top: 100px;
+        font-style: italic;
+    }
+    
+    /* Step Divider */
+    .step-divider {
+        display: flex;
+        align-items: center;
+        margin: 24px 0 16px 0;
+        background: transparent !important;
+    }
+    .step-divider .line { flex: 1; height: 1px; }
+    .step-divider .badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        border: 1px solid;
+        margin: 0 12px;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+        background: transparent !important; /* Badge bg handled inline */
+    }
+    
+    /* Chat Bubbles */
+    .chat-row { display: flex; width: 100%; margin: 6px 0; background: transparent !important; }
+    .chat-row.right { justify-content: flex-end; }
+    .chat-row.center { justify-content: center; }
+    
+    .chat-bubble {
+        max-width: 85%;
+        background: var(--bg-input) !important;
+        padding: 12px 16px;
+        border-radius: 12px;
+        position: relative;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .chat-bubble-right { background: rgba(249, 115, 22, 0.1) !important; max-width: 75%; }
+    
+    .chat-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        padding-bottom: 6px;
+        background: transparent !important;
+    }
+    .turn-badge {
+        background: rgba(255,255,255,0.1) !important;
+        color: var(--text-dim) !important;
+        font-size: 9px;
+        padding: 1px 6px;
+        border-radius: 4px;
+    }
+    .tool-badge {
+        background: rgba(249, 115, 22, 0.2) !important;
+        color: var(--tool) !important;
+        font-size: 9px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+    
+    .chat-content {
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--text-secondary) !important;
+        background: transparent !important;
+    }
+    
+    /* Log Items */
+    .log-item {
+        font-size: 11px;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-family: 'JetBrains Mono', monospace;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .log-item.success { color: var(--success) !important; background: rgba(16, 185, 129, 0.1) !important; }
+    .log-item.warning { color: var(--warning) !important; background: rgba(245, 158, 11, 0.1) !important; }
+    .log-item.error { color: var(--error) !important; background: rgba(239, 68, 68, 0.1) !important; }
+    .log-item.info { color: var(--primary) !important; background: transparent !important; }
+    .log-item.dim { color: var(--text-dim) !important; background: transparent !important; }
+    .log-item.tool { color: var(--tool) !important; background: transparent !important; }
+
+    /* File Tree */
+    .file-tree {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        background: var(--bg-input) !important;
+        padding: 15px;
+        border-radius: 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+    }
+    .tree-item { padding: 3px 0; color: var(--text-secondary) !important; background: transparent !important; }
+    .tree-item.file { color: var(--success) !important; }
+    .tree-item.dir { color: var(--primary) !important; font-weight: bold; }
+    .indent { display: inline-block; width: 15px; }
+    
+    /* Markdown Styles */
+    .markdown-text h1, .markdown-text h2, .markdown-text h3 { color: var(--text-primary) !important; }
+    .markdown-text p { color: var(--text-secondary) !important; }
+    .markdown-text strong { color: var(--text-primary) !important; }
+    blockquote { border-left-color: var(--primary) !important; background: var(--bg-input) !important; color: var(--text-dim) !important; }
+    """
+    
     initial_projects = get_projects()
     
-    with gr.Blocks(title="CODE EVAL v3") as app:
+    with gr.Blocks(title="CODE EVAL") as app:
+        # Inject CSS directly via HTML
+        gr.HTML(f"<style>{css}</style>")
         
         # Header
         gr.HTML('''
-        <div style="background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); 
-                    padding: 30px 20px; text-align: center; border-bottom: 1px solid #30363d;">
-            <div style="font-size: 36px; font-weight: 800; letter-spacing: 4px;
-                        background: linear-gradient(90deg, #58a6ff, #7ee787, #58a6ff);
-                        -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-                CODE EVAL
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px 5px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="width: 40px; height: 40px; background: linear-gradient(135deg, var(--primary), var(--success)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: white;">CE</div>
+                <div>
+                    <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: white;">Code Eval</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">AI-Powered Code Analysis System</div>
+                </div>
             </div>
-            <div style="color: #8b949e; font-size: 12px; margin-top: 5px; letter-spacing: 2px;">
-                MULTI-AGENT CODE ANALYSIS | TESTED AND WORKING
+            <div style="display: flex; gap: 10px;">
+                <div style="padding: 6px 12px; background: rgba(16, 185, 129, 0.1); color: var(--success); border-radius: 20px; font-size: 12px; font-weight: 600;">v3.0 Stable</div>
             </div>
         </div>
         ''')
         
         with gr.Tabs():
             # ============================================================
-            # TAB 1: SINGLE FILE MODE
+            # TAB 1: SINGLE FILE
             # ============================================================
-            with gr.TabItem("Single File Analysis"):
-                gr.HTML('''
-                <div style="background: #161b22; color: #58a6ff; padding: 10px 15px; font-size: 12px; border-radius: 8px; margin: 10px 0;">
-                    Analyze and auto-fix individual Python files using CodeAnalyzer -> CodeExecutor -> CodeModifier agents
-                </div>
-                ''')
-                
+            with gr.TabItem("Single File"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        sf_project = gr.Dropdown(
-                            label="Select Project",
-                            choices=initial_projects,
-                            value=initial_projects[0] if initial_projects else None,
-                            interactive=True
-                        )
-                        sf_file = gr.Dropdown(
-                            label="Select File",
-                            choices=get_files_in_project(initial_projects[0]) if initial_projects else [],
-                            interactive=True
-                        )
-                        sf_provider = gr.Dropdown(
-                            label="LLM Provider",
-                            choices=list(MODEL_MAPPINGS.keys()),
-                            value=DEFAULT_PROVIDER
-                        )
-                        sf_auto_fix = gr.Checkbox(label="Auto-Fix Mode (iterate until success)", value=True)
-                        sf_run_btn = gr.Button("ANALYZE & FIX", variant="primary", size="lg")
-                        sf_refresh = gr.Button("Refresh Projects", size="sm")
-                    
-                    with gr.Column(scale=2):
-                        sf_status = gr.HTML(value=create_status("idle", "Ready", "Select a file to analyze"))
-                
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        sf_logs = gr.HTML(value=create_logs([]))
-                    
-                    with gr.Column(scale=1):
-                        sf_code = gr.Code(
-                            label="Code Editor",
-                            language="python",
-                            lines=20,
-                            interactive=True
-                        )
+                        gr.Markdown("### 🛠️ Configuration")
+                        sf_project = gr.Dropdown(label="Project", choices=initial_projects, value=initial_projects[0] if initial_projects else None)
+                        sf_file = gr.Dropdown(label="Target File", choices=get_files_in_project(initial_projects[0]) if initial_projects else [])
+                        sf_provider = gr.Dropdown(label="Model", choices=list(MODEL_MAPPINGS.keys()), value=DEFAULT_PROVIDER)
+                        sf_auto_fix = gr.Checkbox(label="Auto-Fix Loop", value=True)
+                        
                         with gr.Row():
-                            sf_save_btn = gr.Button("SAVE FILE", variant="primary", size="sm")
-                            sf_save_status = gr.HTML()
-            
+                            sf_run_btn = gr.Button("Analyze & Fix", variant="primary")
+                            sf_refresh = gr.Button("Refresh")
+                        
+                        gr.Markdown("### 📊 Status")
+                        sf_status = gr.HTML(value=create_status("idle", "Ready", "Waiting for input..."))
+                        
+                    with gr.Column(scale=2):
+                        gr.Markdown("### 💻 Editor & Logs")
+                        with gr.Tabs():
+                            with gr.TabItem("Live Logs"):
+                                sf_logs = gr.HTML(value=create_logs([]))
+                            with gr.TabItem("Code Editor"):
+                                sf_code = gr.Code(label="", language="python", lines=25, interactive=True)
+                                sf_save_btn = gr.Button("Save Changes")
+                                sf_save_status = gr.HTML()
+
             # ============================================================
             # TAB 2: QUICK SCAN
             # ============================================================
             with gr.TabItem("Quick Scan"):
-                gr.HTML('''
-                <div style="background: #161b22; color: #58a6ff; padding: 10px 15px; font-size: 12px; border-radius: 8px; margin: 10px 0;">
-                    Fast local scan using Python AST - No AI required, instant results
-                </div>
-                ''')
-                
                 with gr.Row():
                     with gr.Column(scale=1):
-                        qs_project = gr.Dropdown(
-                            label="Select Project",
-                            choices=initial_projects,
-                            value=initial_projects[0] if initial_projects else None,
-                            interactive=True
-                        )
-                        qs_scan_btn = gr.Button("QUICK SCAN", variant="primary", size="lg")
-                        qs_refresh = gr.Button("Refresh Projects", size="sm")
-                    
+                        gr.Markdown("### 🔍 Scanner Config")
+                        qs_project = gr.Dropdown(label="Project", choices=initial_projects, value=initial_projects[0] if initial_projects else None)
+                        with gr.Row():
+                            qs_scan_btn = gr.Button("Start Scan", variant="primary")
+                            qs_refresh = gr.Button("Refresh")
+                        
+                        qs_status = gr.HTML(value=create_status("idle", "Ready", "Select project to scan"))
+                        
                     with gr.Column(scale=2):
-                        qs_status = gr.HTML(value=create_status("idle", "Ready", "Select project and scan"))
-                
-                with gr.Row():
-                    qs_details = gr.HTML()
-                    qs_tree = gr.HTML()
-            
+                        gr.Markdown("### 📈 Scan Results")
+                        qs_details = gr.HTML()
+                        qs_tree = gr.HTML()
+
             # ============================================================
-            # TAB 3: MULTI-AGENT ANALYSIS
+            # TAB 3: MULTI-AGENT
             # ============================================================
-            with gr.TabItem("Multi-Agent Analysis"):
-                gr.HTML('''
-                <div style="background: #161b22; color: #58a6ff; padding: 10px 15px; font-size: 12px; border-radius: 8px; margin: 10px 0;">
-                    Full LangGraph workflow: Scanner -> Analyzer -> Tester -> Fixer -> Reporter
-                </div>
-                ''')
-                
+            with gr.TabItem("Multi-Agent Workflow"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        ma_project = gr.Dropdown(
-                            label="Select Project",
-                            choices=initial_projects,
-                            value=initial_projects[0] if initial_projects else None,
-                            interactive=True
-                        )
-                        ma_provider = gr.Dropdown(
-                            label="LLM Provider",
-                            choices=list(MODEL_MAPPINGS.keys()),
-                            value=DEFAULT_PROVIDER
-                        )
-                        ma_run_btn = gr.Button("START ANALYSIS", variant="primary", size="lg")
-                        ma_refresh = gr.Button("Refresh Projects", size="sm")
-                    
+                        gr.Markdown("### 🤖 Workflow Config")
+                        ma_project = gr.Dropdown(label="Project", choices=initial_projects, value=initial_projects[0] if initial_projects else None)
+                        ma_provider = gr.Dropdown(label="Model", choices=list(MODEL_MAPPINGS.keys()), value=DEFAULT_PROVIDER)
+                        
+                        with gr.Row():
+                            ma_run_btn = gr.Button("Start Analysis", variant="primary")
+                            ma_refresh = gr.Button("Refresh")
+                            
+                        gr.Markdown("### 📡 Live Status")
+                        ma_status = gr.HTML(value=create_status("idle", "Ready", "Workflow idle"))
+                        
                     with gr.Column(scale=2):
-                        ma_status = gr.HTML(value=create_status("idle", "Ready", "Configure and start"))
-                
-                with gr.Row():
-                    ma_logs = gr.HTML(value=create_logs([]))
-                    ma_report = gr.HTML()
-            
+                        gr.Markdown("### 💬 Agent Interaction")
+                        ma_logs = gr.HTML(value=create_logs([]))
+                        ma_report = gr.HTML()
+
             # ============================================================
             # TAB 4: HELP
             # ============================================================
-            with gr.TabItem("Help"):
-                gr.HTML('''
-                <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
-                    <div style="color: #58a6ff; font-size: 20px; margin-bottom: 15px;">How to Use CODE EVAL</div>
-                    
-                    <div style="background: #161b22; padding: 15px; border-radius: 10px; margin-bottom: 12px; border-left: 3px solid #7ee787;">
-                        <div style="color: #7ee787; font-size: 14px; margin-bottom: 5px;">1. Single File Analysis</div>
-                        <div style="color: #8b949e; font-size: 12px;">
-                            Fixes individual files. Agents: CodeAnalyzer -> CodeExecutor -> CodeModifier.<br>
-                            Enable "Auto-Fix Mode" for iterative fixing until code runs successfully.
-                        </div>
-                    </div>
-                    
-                    <div style="background: #161b22; padding: 15px; border-radius: 10px; margin-bottom: 12px; border-left: 3px solid #58a6ff;">
-                        <div style="color: #58a6ff; font-size: 14px; margin-bottom: 5px;">2. Quick Scan</div>
-                        <div style="color: #8b949e; font-size: 12px;">
-                            Instant local analysis using Python AST. No AI calls.<br>
-                            Detects syntax errors and shows project structure.
-                        </div>
-                    </div>
-                    
-                    <div style="background: #161b22; padding: 15px; border-radius: 10px; margin-bottom: 12px; border-left: 3px solid #d29922;">
-                        <div style="color: #d29922; font-size: 14px; margin-bottom: 5px;">3. Multi-Agent Analysis</div>
-                        <div style="color: #8b949e; font-size: 12px;">
-                            Full LangGraph workflow with 5 specialized agents:<br>
-                            <span style="color: #58a6ff;">Scanner</span> -> 
-                            <span style="color: #58a6ff;">Analyzer</span> -> 
-                            <span style="color: #58a6ff;">Tester</span> -> 
-                            <span style="color: #58a6ff;">Fixer</span> -> 
-                            <span style="color: #58a6ff;">Reporter</span>
-                        </div>
-                    </div>
-                    
-                    <div style="background: #21262d; padding: 12px; border-radius: 8px;">
-                        <div style="color: #f85149; font-size: 12px; margin-bottom: 5px;">Setup</div>
-                        <div style="color: #8b949e; font-size: 11px;">
-                            1. Place your projects in: <code style="color: #58a6ff;">code_bench/</code><br>
-                            2. Set your API key in: <code style="color: #58a6ff;">config/llm_config.py</code>
-                        </div>
-                    </div>
-                </div>
-                ''')
-        
-        # Footer
-        gr.HTML('''
-        <div style="text-align: center; padding: 12px; border-top: 1px solid #30363d; margin-top: 20px;">
-            <div style="color: #484f58; font-size: 10px;">CODE EVAL v3.0 | Multi-Agent Code Analysis System</div>
-        </div>
-        ''')
-        
-        # ============================================================
-        # EVENT HANDLERS
-        # ============================================================
-        
+            with gr.TabItem("Documentation"):
+                gr.Markdown("""
+                ### 📘 How to Use Code Eval
+                
+                **1. Single File Mode**
+                > Great for fixing specific bugs in one file. It uses a 3-agent loop: Analyzer -> Executor -> Fixer.
+                
+                **2. Quick Scan**
+                > Runs a static analysis (AST) to check for syntax errors and file structure. No AI cost.
+                
+                **3. Multi-Agent Workflow**
+                > The powerhouse. Orchestrates 5 agents (Scanner, Analyzer, Tester, Fixer, Reporter) to solve complex repo-level issues.
+                """)
+    
+        # Event Wiring
         def update_file_list(project):
             files = get_files_in_project(project)
             return gr.update(choices=files, value=files[0] if files else None)
@@ -851,45 +1002,22 @@ def create_ui():
             projects = get_projects()
             return gr.update(choices=projects, value=projects[0] if projects else None)
         
-        # Single File Mode
         sf_project.change(fn=update_file_list, inputs=[sf_project], outputs=[sf_file])
         sf_file.change(fn=load_file_content, inputs=[sf_project, sf_file], outputs=[sf_code])
-        sf_run_btn.click(
-            fn=run_single_file_analysis,
-            inputs=[sf_project, sf_file, sf_provider, sf_auto_fix],
-            outputs=[sf_status, sf_logs, sf_code]
-        )
+        sf_run_btn.click(fn=run_single_file_analysis, inputs=[sf_project, sf_file, sf_provider, sf_auto_fix], outputs=[sf_status, sf_logs, sf_code])
         sf_save_btn.click(fn=save_file, inputs=[sf_project, sf_file, sf_code], outputs=[sf_save_status])
         sf_refresh.click(fn=refresh_projects, outputs=[sf_project])
         
-        # Quick Scan Mode
         qs_scan_btn.click(fn=run_quick_scan, inputs=[qs_project], outputs=[qs_status, qs_details, qs_tree])
         qs_refresh.click(fn=refresh_projects, outputs=[qs_project])
         
-        # Multi-Agent Mode
-        ma_run_btn.click(
-            fn=run_repo_analysis,
-            inputs=[ma_project, ma_provider],
-            outputs=[ma_status, ma_logs, ma_report]
-        )
+        ma_run_btn.click(fn=run_repo_analysis, inputs=[ma_project, ma_provider], outputs=[ma_status, ma_logs, ma_report])
         ma_refresh.click(fn=refresh_projects, outputs=[ma_project])
     
     return app
 
 
-# ============================================================================
-# MAIN
-# ============================================================================
-
 if __name__ == "__main__":
     BENCH_DIR.mkdir(exist_ok=True)
-    
-    print("\n" + "=" * 60)
-    print("  CODE EVAL v3.0 - Multi-Agent Code Analysis")
-    print("=" * 60)
-    print(f"  Projects folder: {BENCH_DIR}")
-    print(f"  Available projects: {get_projects()}")
-    print("=" * 60 + "\n")
-    
     app = create_ui()
     app.launch(server_name="127.0.0.1", share=False, inbrowser=True)

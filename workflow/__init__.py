@@ -1,26 +1,35 @@
-"""Workflow module for multi-agent system"""
+"""
+Workflow Module
+LangGraph-based workflows for code analysis and improvement
+"""
+
+# Single-file workflow
 from .code_workflow import (
-    interactive_session
+    CodeImprovementWorkflow,
+    create_workflow
 )
 
-# Import improved workflow with memory support
+# Repository multi-agent workflow
+from .repo_workflow import (
+    MultiAgentRepoWorkflow,
+    create_multi_agent_workflow,
+    create_agent_executor
+)
+
+# Legacy interactive session
 try:
-    from .code_workflow_improved import (
-        CodeImprovementWorkflow,
-        create_workflow
-    )
-    print("[+] Using improved workflow with memory/checkpointing support")
-except ImportError as e:
-    print(f"[!] Could not import improved workflow: {e}")
-    print("    Falling back to basic workflow")
-    from .code_workflow import (
-        CodeImprovementWorkflow,
-        create_workflow
-    )
+    from .code_workflow import interactive_session
+except ImportError:
+    interactive_session = None
 
 __all__ = [
+    # Single-file workflow
     "CodeImprovementWorkflow",
     "create_workflow",
+    # Repository workflow
+    "MultiAgentRepoWorkflow",
+    "create_multi_agent_workflow",
+    "create_agent_executor",
+    # Legacy
     "interactive_session"
 ]
-

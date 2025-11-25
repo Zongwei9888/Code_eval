@@ -7,12 +7,6 @@ Features:
 1. Single File Analysis - Analyze and fix individual files
 2. Quick Scan - Fast local scan (no AI)
 3. Multi-Agent Analysis - Full workflow with feedback loops
-
-Usage:
-  python cli_v2.py                    # Interactive mode
-  python cli_v2.py scan <project>     # Quick scan
-  python cli_v2.py analyze <project>  # Multi-agent analysis
-  python cli_v2.py fix <file>         # Single file fix
 """
 import sys
 import os
@@ -440,7 +434,7 @@ def print_file_tree(path: Path, prefix: str = "", max_depth: int = 3, current_de
 
 def run_single_file_analysis(project_name: str, file_path: str, provider: str = "openrouter", auto_fix: bool = True):
     """Run analysis on a single file"""
-    from workflow.code_workflow_improved import create_workflow
+    from workflow.code_workflow import create_workflow
     
     full_path = BENCH_DIR / project_name / file_path
     

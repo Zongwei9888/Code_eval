@@ -1,69 +1,80 @@
-"""Agent module for multi-agent system"""
+"""
+Agent Module
+Multi-agent system components for code analysis and improvement
+"""
+
+# State definitions
+from .state import (
+    SingleFileState,
+    MultiAgentState,  # Alias for backward compatibility
+    RepoWorkflowState,
+    AgentLoopState,
+    create_single_file_state,
+    create_initial_state,  # Alias for backward compatibility
+    create_repo_workflow_state,
+    create_agent_loop_state
+)
+
+# Single-file agents
 from .code_agents import (
     CodeAnalyzerAgent,
     CodeExecutorAgent,
     CodeModifierAgent,
     create_agents
 )
-from .state import MultiAgentState, create_initial_state
 
-# LangGraph-based repo workflow (proper multi-agent with LLM + tools)
-from .repo_workflow import (
-    RepoAnalysisWorkflow,
-    RepoAnalysisState,
-    create_repo_workflow,
-    ALL_REPO_TOOLS,
-    # Tools
-    scan_directory,
-    read_file,
-    write_file,
-    check_syntax,
-    run_python_file,
-    run_tests,
-    install_dependencies
-)
-
-# Legacy repo agents (local utilities)
+# Local repository agents (non-LLM)
 from .repo_agents import (
     ProjectScannerAgent,
     StaticAnalyzerAgent,
     EnvironmentAgent,
     TestRunnerAgent,
-    ErrorAnalyzerAgent,
-    CodeFixerAgent,
     RepoAnalysisOrchestrator,
     create_orchestrator,
     quick_scan,
+    # Data classes
     ProjectInfo,
     FileAnalysis,
+    TestResult,
     AnalysisReport
 )
 
+# Multi-agent workflow (backward compatibility imports)
+from .multi_agent_system import (
+    MultiAgentWorkflow,
+    create_multi_agent_workflow,
+    ALL_TOOLS
+)
+
 __all__ = [
-    # Original agents
+    # State
+    "SingleFileState",
+    "MultiAgentState",
+    "RepoWorkflowState",
+    "AgentLoopState",
+    "create_single_file_state",
+    "create_initial_state",
+    "create_repo_workflow_state",
+    "create_agent_loop_state",
+    # Single-file agents
     "CodeAnalyzerAgent",
     "CodeExecutorAgent",
     "CodeModifierAgent",
-    "MultiAgentState",
     "create_agents",
-    "create_initial_state",
-    # New LangGraph workflow
-    "RepoAnalysisWorkflow",
-    "RepoAnalysisState",
-    "create_repo_workflow",
-    "ALL_REPO_TOOLS",
-    # Legacy repo utilities
+    # Local repo agents
     "ProjectScannerAgent",
     "StaticAnalyzerAgent",
     "EnvironmentAgent",
     "TestRunnerAgent",
-    "ErrorAnalyzerAgent",
-    "CodeFixerAgent",
     "RepoAnalysisOrchestrator",
     "create_orchestrator",
     "quick_scan",
     "ProjectInfo",
     "FileAnalysis",
-    "AnalysisReport"
+    "TestResult",
+    "AnalysisReport",
+    # Multi-agent workflow
+    "MultiAgentWorkflow",
+    "create_multi_agent_workflow",
+    "ALL_TOOLS"
 ]
-

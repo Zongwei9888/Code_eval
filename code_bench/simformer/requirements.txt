@@ -1,8 +1,0 @@
-sbi
-torch
-jax
-jaxlib
-numpy
-scipy
-scikit-learn
-pyyaml

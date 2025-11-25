@@ -1,4 +1,9 @@
-"""Tools module for multi-agent system"""
+"""
+Tools Module
+Code manipulation and analysis tools for multi-agent system
+"""
+
+# Single-file tools
 from .code_tools import (
     ALL_TOOLS,
     get_tool_by_name,
@@ -12,7 +17,25 @@ from .code_tools import (
     call_mcp_tool
 )
 
-# Project analyzer
+# Repository analysis tools
+from .repo_tools import (
+    ALL_REPO_TOOLS,
+    SCANNER_TOOLS,
+    ANALYZER_TOOLS,
+    FIXER_TOOLS,
+    EXECUTOR_TOOLS,
+    get_repo_tool_by_name,
+    scan_project,
+    read_file_content,
+    write_file_content,
+    check_python_syntax,
+    execute_python_file,
+    run_pytest,
+    run_unittest,
+    install_dependencies
+)
+
+# Project analyzer utility
 from .project_analyzer import (
     ProjectAnalyzer,
     ProjectInfo,
@@ -20,7 +43,7 @@ from .project_analyzer import (
     scan_code_bench
 )
 
-# MCP integration
+# MCP integration (optional)
 try:
     from .mcp_integration import (
         MCPToolManager,
@@ -31,9 +54,9 @@ try:
     MCP_INTEGRATION_AVAILABLE = True
 except ImportError:
     MCP_INTEGRATION_AVAILABLE = False
-    print("[!] MCP integration not available. Install langchain-mcp-adapters to enable.")
 
 __all__ = [
+    # Single-file tools
     "ALL_TOOLS",
     "get_tool_by_name",
     "read_file_tool",
@@ -43,7 +66,29 @@ __all__ = [
     "execute_file",
     "analyze_error",
     "search_code",
-    "call_mcp_tool"
+    "call_mcp_tool",
+    # Repository tools
+    "ALL_REPO_TOOLS",
+    "SCANNER_TOOLS",
+    "ANALYZER_TOOLS",
+    "FIXER_TOOLS",
+    "EXECUTOR_TOOLS",
+    "get_repo_tool_by_name",
+    "scan_project",
+    "read_file_content",
+    "write_file_content",
+    "check_python_syntax",
+    "execute_python_file",
+    "run_pytest",
+    "run_unittest",
+    "install_dependencies",
+    # Project analyzer
+    "ProjectAnalyzer",
+    "ProjectInfo",
+    "FileInfo",
+    "scan_code_bench",
+    # MCP
+    "MCP_INTEGRATION_AVAILABLE"
 ]
 
 if MCP_INTEGRATION_AVAILABLE:
@@ -53,4 +98,3 @@ if MCP_INTEGRATION_AVAILABLE:
         "get_mcp_tools_sync",
         "get_default_mcp_config"
     ])
-
