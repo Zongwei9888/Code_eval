@@ -9,10 +9,10 @@ try:
         CodeImprovementWorkflow,
         create_workflow
     )
-    print("✅ Using improved workflow with memory/checkpointing support")
+    print("[+] Using improved workflow with memory/checkpointing support")
 except ImportError as e:
-    print(f"⚠️  Could not import improved workflow: {e}")
-    print("   Falling back to basic workflow")
+    print(f"[!] Could not import improved workflow: {e}")
+    print("    Falling back to basic workflow")
     from .code_workflow import (
         CodeImprovementWorkflow,
         create_workflow

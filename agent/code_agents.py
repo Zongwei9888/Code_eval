@@ -48,8 +48,6 @@ class CodeModificationState(BaseModel):
     changes_made: List[str] = Field(default_factory=list)
 
 
-
-
 class CodeAnalyzerAgent:
     """Agent for analyzing code structure, quality, and potential issues"""
     
@@ -62,9 +60,9 @@ class CodeAnalyzerAgent:
             mcp_tools = get_mcp_tools_sync()
             if mcp_tools:
                 all_tools.extend(mcp_tools)
-                print(f"✅ CodeAnalyzerAgent: Added {len(mcp_tools)} MCP tools")
-        except Exception as e:
-            print(f"⚠️  CodeAnalyzerAgent: Could not load MCP tools: {e}")
+                print(f"[+] CodeAnalyzerAgent: Added {len(mcp_tools)} MCP tools")
+        except Exception:
+            pass  # MCP is optional
         
         self.llm_with_tools = self.llm.bind_tools(all_tools)
         self.system_prompt = ANALYZER_SYSTEM_PROMPT
@@ -72,26 +70,32 @@ class CodeAnalyzerAgent:
     def analyze(self, state: MultiAgentState) -> Dict[str, Any]:
         """Analyze code and identify issues"""
         
+        # Access state as dictionary
+        file_content = state.get("file_content", "")
+        target_file = state.get("target_file", "")
+        current_code = state.get("current_code", "")
+        messages = state.get("messages", [])
+        
         # Read file if needed
-        if not state.file_content and state.target_file:
-            messages = state.messages + [
+        if not file_content and target_file:
+            messages_to_send = list(messages) + [
                 SystemMessage(content=self.system_prompt),
-                HumanMessage(content=f"Read and analyze the file: {state.target_file}")
+                HumanMessage(content=f"Read and analyze the file: {target_file}")
             ]
         else:
             analysis_prompt = format_analyzer_prompt(
-                file_path=state.target_file,
-                code_content=state.file_content or state.current_code
+                file_path=target_file,
+                code_content=file_content or current_code
             )
-            messages = state.messages + [
+            messages_to_send = list(messages) + [
                 SystemMessage(content=self.system_prompt),
                 HumanMessage(content=analysis_prompt)
             ]
         
-        response = self.llm_with_tools.invoke(messages)
+        response = self.llm_with_tools.invoke(messages_to_send)
         
         # Handle tool calls if any
-        updated_messages = state.messages + [response]
+        updated_messages = list(messages) + [response]
         
         if response.tool_calls:
             for tool_call in response.tool_calls:
@@ -160,9 +164,9 @@ class CodeExecutorAgent:
             mcp_tools = get_mcp_tools_sync()
             if mcp_tools:
                 all_tools.extend(mcp_tools)
-                print(f"✅ CodeExecutorAgent: Added {len(mcp_tools)} MCP tools")
-        except Exception as e:
-            print(f"⚠️  CodeExecutorAgent: Could not load MCP tools: {e}")
+                print(f"[+] CodeExecutorAgent: Added {len(mcp_tools)} MCP tools")
+        except Exception:
+            pass  # MCP is optional
         
         self.llm_with_tools = self.llm.bind_tools(all_tools)
         self.system_prompt = EXECUTOR_SYSTEM_PROMPT
@@ -170,21 +174,27 @@ class CodeExecutorAgent:
     def execute(self, state: MultiAgentState) -> Dict[str, Any]:
         """Execute code and capture results"""
         
-        code_to_execute = state.current_code or state.file_content
-        file_path = state.target_file
+        # Access state as dictionary
+        current_code = state.get("current_code", "")
+        file_content = state.get("file_content", "")
+        target_file = state.get("target_file", "")
+        messages = state.get("messages", [])
+        execution_attempts = state.get("execution_attempts", 0)
+        
+        code_to_execute = current_code or file_content
         
         execution_prompt = format_executor_prompt(
-            file_path=file_path,
+            file_path=target_file,
             code_content=code_to_execute
         )
         
-        messages = state.messages + [
+        messages_to_send = list(messages) + [
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=execution_prompt)
         ]
         
-        response = self.llm_with_tools.invoke(messages)
-        updated_messages = state.messages + [response]
+        response = self.llm_with_tools.invoke(messages_to_send)
+        updated_messages = list(messages) + [response]
         
         execution_result = ""
         success = False
@@ -234,7 +244,7 @@ class CodeExecutorAgent:
         
         return {
             "messages": updated_messages,
-            "execution_attempts": state.execution_attempts + 1,
+            "execution_attempts": execution_attempts + 1,
             "last_execution_result": execution_result,
             "execution_success": success,
             "last_error": error_details if not success else ""
@@ -253,9 +263,9 @@ class CodeModifierAgent:
             mcp_tools = get_mcp_tools_sync()
             if mcp_tools:
                 all_tools.extend(mcp_tools)
-                print(f"✅ CodeModifierAgent: Added {len(mcp_tools)} MCP tools")
-        except Exception as e:
-            print(f"⚠️  CodeModifierAgent: Could not load MCP tools: {e}")
+                print(f"[+] CodeModifierAgent: Added {len(mcp_tools)} MCP tools")
+        except Exception:
+            pass  # MCP is optional
         
         self.llm_with_tools = self.llm.bind_tools(all_tools)
         self.system_prompt = MODIFIER_SYSTEM_PROMPT
@@ -263,28 +273,36 @@ class CodeModifierAgent:
     def modify(self, state: MultiAgentState) -> Dict[str, Any]:
         """Modify code to fix identified issues"""
         
-        current_code = state.current_code or state.file_content
-        analysis = state.code_analysis
-        issues = state.identified_issues
-        error = state.last_error
+        # Access state as dictionary
+        current_code = state.get("current_code", "")
+        file_content = state.get("file_content", "")
+        target_file = state.get("target_file", "")
+        code_analysis = state.get("code_analysis", "")
+        identified_issues = state.get("identified_issues", [])
+        last_error = state.get("last_error", "")
+        messages = state.get("messages", [])
+        execution_attempts = state.get("execution_attempts", 0)
+        modification_history = state.get("modification_history", [])
+        
+        code = current_code or file_content
         
         modification_prompt = format_modifier_prompt(
-            file_path=state.target_file,
-            current_code=current_code,
-            analysis=analysis,
-            issues=issues,
-            error=error
+            file_path=target_file,
+            current_code=code,
+            analysis=code_analysis,
+            issues=identified_issues,
+            error=last_error
         )
         
-        messages = state.messages + [
+        messages_to_send = list(messages) + [
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=modification_prompt)
         ]
         
-        response = self.llm_with_tools.invoke(messages)
-        updated_messages = state.messages + [response]
+        response = self.llm_with_tools.invoke(messages_to_send)
+        updated_messages = list(messages) + [response]
         
-        modified_code = current_code
+        modified_code = code
         changes_made = []
         
         # Handle tool calls
@@ -302,7 +320,7 @@ class CodeModifierAgent:
                         # If writing file, capture the new code
                         if tool_name == "write_file_tool" and "content" in tool_args:
                             modified_code = tool_args["content"]
-                            changes_made.append(f"Modified {state.target_file}")
+                            changes_made.append(f"Modified {target_file}")
                         
                         updated_messages.append(
                             ToolMessage(
@@ -320,8 +338,8 @@ class CodeModifierAgent:
         
         # Track modification history
         modification_record = {
-            "attempt": state.execution_attempts,
-            "issues_addressed": issues,
+            "attempt": execution_attempts,
+            "issues_addressed": identified_issues,
             "changes": changes_made,
             "code_snapshot": modified_code
         }
@@ -329,7 +347,7 @@ class CodeModifierAgent:
         return {
             "messages": updated_messages,
             "current_code": modified_code,
-            "modification_history": state.modification_history + [modification_record]
+            "modification_history": modification_history + [modification_record]
         }
 
 
@@ -349,4 +367,3 @@ def create_agents(llm_provider: str = "openrouter"):
         "executor": CodeExecutorAgent(llm_provider),
         "modifier": CodeModifierAgent(llm_provider)
     }
-

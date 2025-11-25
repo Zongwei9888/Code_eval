@@ -12,6 +12,14 @@ from .code_tools import (
     call_mcp_tool
 )
 
+# Project analyzer
+from .project_analyzer import (
+    ProjectAnalyzer,
+    ProjectInfo,
+    FileInfo,
+    scan_code_bench
+)
+
 # MCP integration
 try:
     from .mcp_integration import (
@@ -23,7 +31,7 @@ try:
     MCP_INTEGRATION_AVAILABLE = True
 except ImportError:
     MCP_INTEGRATION_AVAILABLE = False
-    print("⚠️  MCP integration not available. Install langchain-mcp-adapters to enable.")
+    print("[!] MCP integration not available. Install langchain-mcp-adapters to enable.")
 
 __all__ = [
     "ALL_TOOLS",

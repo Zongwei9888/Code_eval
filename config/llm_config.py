@@ -12,18 +12,18 @@ load_dotenv()
 
 # Default provider configuration
 DEFAULT_PROVIDER: Literal["openrouter", "anthropic", "openai", "google", "ollama"] = "openrouter"
-DEFAULT_MODEL = "gpt-4o"
+DEFAULT_MODEL = "openai/gpt-4o"
 
 # OpenRouter configuration
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 # Model mappings for different providers
 MODEL_MAPPINGS = {
     "openrouter": {
-        "default": "gpt-4o",
-        "fast": "gpt-3.5-turbo",
-        "powerful": "gpt-4o"
+        "default": "anthropic/claude-sonnet-4",
+        "fast": "anthropic/claude-sonnet-4",
+        "powerful": "anthropic/claude-opus-4.5"
     },
     "anthropic": {
         "default": "claude-3-7-sonnet-latest",
@@ -31,14 +31,14 @@ MODEL_MAPPINGS = {
         "powerful": "claude-3-opus-20240229"
     },
     "openai": {
-        "default": "gpt-4-turbo-preview",
-        "fast": "gpt-3.5-turbo",
-        "powerful": "gpt-4"
+        "default": "openai/gpt-4-turbo-preview",
+        "fast": "openai/gpt-3.5-turbo",
+        "powerful": "openai/gpt-4o"
     },
     "google": {
-        "default": "gemini-1.5-pro",
-        "fast": "gemini-1.5-flash",
-        "powerful": "gemini-1.5-pro"
+        "default": "google/gemini-2.5-pro",
+        "fast": "google/gemini-2.5-flash",
+        "powerful": "google/gemini-2.5-pro"
     },
     "ollama": {
         "default": "llama3.1",

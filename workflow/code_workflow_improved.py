@@ -5,7 +5,10 @@ Implements best practices from LangGraph documentation
 from typing import Literal, Dict, Any, Optional
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.sqlite import SqliteSaver
+try:
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver as SqliteSaver
+except ImportError:
+    SqliteSaver = None
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 import os
@@ -62,14 +65,14 @@ class CodeImprovementWorkflow:
         self.agents = create_agents(llm_provider)
         
         # Initialize checkpointer based on preference
-        if use_sqlite:
+        if use_sqlite and SqliteSaver:
             # Production: SQLite persistence
             self.checkpointer = SqliteSaver.from_conn_string(sqlite_path)
-            print(f"✅ Using SQLite checkpointer: {sqlite_path}")
+            print(f"  [+] Using SQLite checkpointer: {sqlite_path}")
         else:
             # Development: In-memory checkpointing
             self.checkpointer = MemorySaver()
-            print("✅ Using in-memory checkpointer")
+            print("  [+] Using in-memory checkpointer")
         
         # Build graph with checkpointer
         self.graph = self._build_graph()
@@ -109,67 +112,76 @@ class CodeImprovementWorkflow:
     def _analyze_node(self, state: MultiAgentState) -> Dict[str, Any]:
         """Node for code analysis"""
         print(f"\n{'='*60}")
-        print(f"🔍 ANALYZING CODE (Attempt {state['execution_attempts'] + 1}/{self.max_attempts})")
+        print(f"  [ANALYZE] Code Analysis (Attempt {state['execution_attempts'] + 1}/{self.max_attempts})")
         print(f"{'='*60}")
         
         analyzer = self.agents["analyzer"]
         result = analyzer.analyze(state)
         
-        print(f"\n📊 Analysis Complete:")
-        print(f"   - Issues found: {len(result.get('identified_issues', []))}")
+        # Log LLM response
+        if result.get("code_analysis"):
+            response_text = result["code_analysis"]
+            print(f"\n  [LLM Response]:")
+            for line in response_text.split('\n')[:10]:
+                print(f"      {line[:80]}")
+            if len(response_text.split('\n')) > 10:
+                print(f"      ... ({len(response_text.split('\\n')) - 10} more lines)")
+        
+        print(f"\n  [+] Analysis Complete:")
+        print(f"      Issues found: {len(result.get('identified_issues', []))}")
         
         return result
     
     def _execute_node(self, state: MultiAgentState) -> Dict[str, Any]:
         """Node for code execution"""
         print(f"\n{'='*60}")
-        print(f"▶️  EXECUTING CODE")
+        print(f"  [EXECUTE] Running Code")
         print(f"{'='*60}")
         
         executor = self.agents["executor"]
         result = executor.execute(state)
         
         success = result.get("execution_success", False)
-        print(f"\n✅ Execution {'SUCCEEDED' if success else '❌ FAILED'}")
+        print(f"\n  [{'+'if success else '!'}] Execution {'SUCCEEDED' if success else 'FAILED'}")
         
         if not success and result.get("last_error"):
-            print(f"\n⚠️  Error Details:")
+            print(f"\n  [!] Error Details:")
             error_lines = result["last_error"].split('\n')[:5]
             for line in error_lines:
-                print(f"   {line}")
+                print(f"      {line}")
         
         return result
     
     def _modify_node(self, state: MultiAgentState) -> Dict[str, Any]:
         """Node for code modification"""
         print(f"\n{'='*60}")
-        print(f"🔧 MODIFYING CODE")
+        print(f"  [MODIFY] Applying Fixes")
         print(f"{'='*60}")
         
         modifier = self.agents["modifier"]
         result = modifier.modify(state)
         
-        print(f"\n✏️  Modifications applied")
-        print(f"   - Changes tracked in history")
+        print(f"\n  [+] Modifications applied")
+        print(f"      Changes tracked in history")
         
         return result
     
     def _finalize_node(self, state: MultiAgentState) -> Dict[str, Any]:
         """Node for finalizing results"""
         print(f"\n{'='*60}")
-        print(f"🎯 FINALIZING RESULTS")
+        print(f"  [FINALIZE] Results Summary")
         print(f"{'='*60}")
         
         if state["execution_success"]:
-            status = f"✅ SUCCESS: Code executes correctly after {state['execution_attempts']} attempt(s)"
+            status = f"[+] SUCCESS: Code executes correctly after {state['execution_attempts']} attempt(s)"
         else:
-            status = f"⚠️  INCOMPLETE: Max attempts ({self.max_attempts}) reached. Code still has issues."
+            status = f"[!] INCOMPLETE: Max attempts ({self.max_attempts}) reached. Code still has issues."
         
-        print(f"\n{status}")
-        print(f"\n📋 Summary:")
-        print(f"   - Total attempts: {state['execution_attempts']}")
-        print(f"   - Modifications made: {len(state['modification_history'])}")
-        print(f"   - Final status: {'Success' if state['execution_success'] else 'Needs more work'}")
+        print(f"\n  {status}")
+        print(f"\n  Summary:")
+        print(f"      Total attempts:    {state['execution_attempts']}")
+        print(f"      Modifications:     {len(state['modification_history'])}")
+        print(f"      Final status:      {'Success' if state['execution_success'] else 'Needs more work'}")
         
         return {
             "final_status": status,
@@ -219,12 +231,12 @@ class CodeImprovementWorkflow:
             thread_id = str(uuid.uuid4())
         
         print(f"\n{'='*80}")
-        print(f"🚀 Starting Code Improvement Workflow")
+        print(f"  CODE IMPROVEMENT WORKFLOW")
         print(f"{'='*80}")
-        print(f"Target File: {file_path}")
-        print(f"Max Attempts: {self.max_attempts}")
-        print(f"LLM Provider: {self.llm_provider}")
-        print(f"Thread ID: {thread_id}")
+        print(f"  Target File:   {file_path}")
+        print(f"  Max Attempts:  {self.max_attempts}")
+        print(f"  LLM Provider:  {self.llm_provider}")
+        print(f"  Thread ID:     {thread_id}")
         
         # Create config with thread ID for checkpointing
         config: RunnableConfig = {
@@ -247,14 +259,14 @@ class CodeImprovementWorkflow:
             final_state = self.graph.invoke(initial_state, config)
             
             print(f"\n{'='*80}")
-            print(f"🏁 Workflow Complete")
+            print(f"  WORKFLOW COMPLETE")
             print(f"{'='*80}")
             
             return final_state
             
         except Exception as e:
             print(f"\n{'='*80}")
-            print(f"❌ Workflow Error: {str(e)}")
+            print(f"  [ERROR] Workflow Error: {str(e)}")
             print(f"{'='*80}")
             raise
     
@@ -281,9 +293,9 @@ class CodeImprovementWorkflow:
             thread_id = str(uuid.uuid4())
         
         print(f"\n{'='*80}")
-        print(f"🚀 Starting Code Improvement Workflow (Streaming)")
+        print(f"  CODE IMPROVEMENT WORKFLOW (Streaming)")
         print(f"{'='*80}")
-        print(f"Thread ID: {thread_id}")
+        print(f"  Thread ID: {thread_id}")
         
         # Create config with thread ID
         config: RunnableConfig = {
@@ -345,23 +357,23 @@ class CodeImprovementWorkflow:
         }
         
         print(f"\n{'='*80}")
-        print(f"🔄 Resuming Workflow")
+        print(f"  RESUMING WORKFLOW")
         print(f"{'='*80}")
-        print(f"Thread ID: {thread_id}")
+        print(f"  Thread ID: {thread_id}")
         
         try:
             # Resume from checkpoint (pass None to continue from last state)
             final_state = self.graph.invoke(None, config)
             
             print(f"\n{'='*80}")
-            print(f"🏁 Workflow Resumed and Completed")
+            print(f"  WORKFLOW RESUMED AND COMPLETED")
             print(f"{'='*80}")
             
             return final_state
             
         except Exception as e:
             print(f"\n{'='*80}")
-            print(f"❌ Resume Error: {str(e)}")
+            print(f"  [ERROR] Resume Error: {str(e)}")
             print(f"{'='*80}")
             raise
     
@@ -382,15 +394,15 @@ class CodeImprovementWorkflow:
             with open(output_path, 'wb') as f:
                 f.write(graph_image)
             
-            print(f"✅ Workflow graph saved to: {output_path}")
+            print(f"  [+] Workflow graph saved to: {output_path}")
             
             return Image(graph_image)
             
         except ImportError:
-            print("⚠️  IPython not available. Cannot display graph.")
-            print("   Install with: pip install ipython")
+            print("  [!] IPython not available. Cannot display graph.")
+            print("      Install with: pip install ipython")
         except Exception as e:
-            print(f"⚠️  Could not generate graph: {str(e)}")
+            print(f"  [!] Could not generate graph: {str(e)}")
 
 
 def create_workflow(

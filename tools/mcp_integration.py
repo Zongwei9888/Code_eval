@@ -13,8 +13,8 @@ try:
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
-    print("⚠️  langchain-mcp-adapters not installed. MCP integration disabled.")
-    print("   Install with: pip install langchain-mcp-adapters")
+    print("[!] langchain-mcp-adapters not installed. MCP integration disabled.")
+    print("    Install with: pip install langchain-mcp-adapters")
 
 
 class MCPToolManager:
@@ -55,14 +55,14 @@ class MCPToolManager:
             True if initialization successful, False otherwise
         """
         if not MCP_AVAILABLE:
-            print("⚠️  MCP not available. Skipping initialization.")
+            print("[!] MCP not available. Skipping initialization.")
             return False
             
         if self._initialized:
             return True
             
         if not self.servers_config:
-            print("ℹ️  No MCP servers configured. Skipping MCP initialization.")
+            print("[*] No MCP servers configured. Skipping MCP initialization.")
             return False
             
         try:
@@ -73,12 +73,12 @@ class MCPToolManager:
             self.tools = await self.client.get_tools()
             
             self._initialized = True
-            print(f"✅ MCP initialized with {len(self.tools)} tools from {len(self.servers_config)} server(s)")
+            print(f"[+] MCP initialized with {len(self.tools)} tools from {len(self.servers_config)} server(s)")
             
             return True
             
         except Exception as e:
-            print(f"❌ Failed to initialize MCP: {str(e)}")
+            print(f"[!] Failed to initialize MCP: {str(e)}")
             return False
     
     def get_tools(self) -> List[BaseTool]:
@@ -95,9 +95,9 @@ class MCPToolManager:
         if self.client:
             try:
                 await self.client.close()
-                print("✅ MCP client closed")
+                print("[+] MCP client closed")
             except Exception as e:
-                print(f"⚠️  Error closing MCP client: {str(e)}")
+                print(f"[!] Error closing MCP client: {str(e)}")
 
 
 # Default MCP configuration from environment
@@ -170,7 +170,12 @@ def get_mcp_tools_sync() -> List[BaseTool]:
     """
     try:
         # Try to get existing event loop
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
         if loop.is_running():
             # If loop is running, create a task
             import concurrent.futures
@@ -179,8 +184,7 @@ def get_mcp_tools_sync() -> List[BaseTool]:
                 return future.result()
         else:
             # If no loop is running, use asyncio.run
-            return asyncio.run(get_mcp_tools())
+            return loop.run_until_complete(get_mcp_tools())
     except Exception as e:
-        print(f"⚠️  Failed to get MCP tools: {str(e)}")
+        # Silently fail - MCP is optional
         return []
-
