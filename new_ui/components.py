@@ -218,8 +218,8 @@ class LogViewer:
         self._build()
     
     def _build(self):
-        with ui.element('div').classes('glass-card').style(
-            f'height: 500px; overflow-y: auto; background: {COLORS["bg_secondary"]};'
+        with ui.scroll_area().classes('glass-card w-full').style(
+            f'height: 500px; width: 100%; background: {COLORS["bg_secondary"]};'
         ) as self.container:
             self._render_empty_state()
     
@@ -301,7 +301,7 @@ class WorkflowVisualizer:
         self._build()
     
     def _build(self):
-        with ui.element('div').classes('glass-card p-4') as self.container:
+        with ui.element('div').classes('glass-card p-4 w-full') as self.container:
             ui.label('Workflow Progress').classes('text-sm font-bold mb-4').style(f'color: {COLORS["text_dim"]}')
             
             with ui.element('div').classes('flex items-center justify-between gap-2'):
@@ -358,6 +358,7 @@ class WorkflowVisualizer:
         """Refresh the visualization"""
         if self.container:
             self.container.clear()
+            self.container.classes('glass-card p-4 w-full')
             with self.container:
                 ui.label('Workflow Progress').classes('text-sm font-bold mb-4').style(f'color: {COLORS["text_dim"]}')
                 

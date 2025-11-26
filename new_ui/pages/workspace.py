@@ -138,8 +138,8 @@ class WorkspacePage:
             # Chat container
             with ui.element('div').classes('flex flex-col h-full'):
                 # Messages
-                self.chat_container = ui.element('div').classes('flex-grow').style(
-                    f'overflow-y: auto; background: {COLORS["bg_primary"]}; border-radius: 8px; padding: 8px;'
+                self.chat_container = ui.scroll_area().classes('flex-grow').style(
+                    f'background: {COLORS["bg_primary"]}; border-radius: 8px; padding: 8px;'
                 )
                 with self.chat_container:
                     ChatMessage("system", "Hi! I'm your AI coding assistant. Ask me anything!")

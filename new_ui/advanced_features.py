@@ -89,8 +89,8 @@ class TerminalEmulator:
         self._build()
     
     def _build(self):
-        with ui.element('div').classes('glass-card').style(
-            f'background: #0d1117; border: 1px solid {COLORS["border"]}; border-radius: 12px; overflow: hidden;'
+        with ui.element('div').classes('glass-card w-full').style(
+            f'background: #0d1117; border: 1px solid {COLORS["border"]}; border-radius: 12px; overflow: hidden; width: 100%;'
         ) as self.container:
             
             # Terminal header
@@ -107,8 +107,8 @@ class TerminalEmulator:
                 self.status_badge = ui.badge('READY', color='green').classes('ml-auto')
             
             # Terminal output
-            self.output_container = ui.element('div').classes('p-4 mono text-sm').style(
-                'height: 300px; overflow-y: auto;'
+            self.output_container = ui.scroll_area().classes('p-4 mono text-sm').style(
+                'height: 300px;'
             )
             with self.output_container:
                 self._render_prompt()
@@ -175,7 +175,7 @@ class ProjectHealthDashboard:
         self._build()
     
     def _build(self):
-        with ui.element('div').classes('grid grid-cols-2 lg:grid-cols-4 gap-4') as self.container:
+        with ui.element('div').classes('w-full grid grid-cols-2 lg:grid-cols-4 gap-4') as self.container:
             self._create_metric_card('health_score', 'Health Score', '-', COLORS["success"], 'favorite')
             self._create_metric_card('code_quality', 'Code Quality', '-', COLORS["info"], 'code')
             self._create_metric_card('test_coverage', 'Test Coverage', '-', COLORS["warning"], 'science')
@@ -360,7 +360,7 @@ class LintingPanel:
         self._build()
     
     def _build(self):
-        with ui.element('div').classes('glass-card p-4') as self.container:
+        with ui.element('div').classes('glass-card p-4 w-full') as self.container:
             with ui.element('div').classes('flex items-center justify-between mb-4'):
                 with ui.element('div').classes('flex items-center gap-2'):
                     ui.icon('rule').style(f'color: {COLORS["warning"]}')

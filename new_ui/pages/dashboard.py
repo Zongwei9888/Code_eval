@@ -26,7 +26,7 @@ class DashboardPage:
     
     def render(self):
         """Render the dashboard"""
-        with ui.element('div').classes('p-6').style(f'background: {COLORS["bg_primary"]}; min-height: 100vh;'):
+        with ui.element('div').classes('w-full p-6').style(f'background: {COLORS["bg_primary"]}; min-height: 100vh; width: 100%;'):
             
             # Welcome header
             self._render_header()

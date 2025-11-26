@@ -7,6 +7,8 @@ import sys
 import asyncio
 import uuid
 import traceback
+import queue
+import threading
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -189,7 +191,7 @@ def main_page():
     create_header()
     
     # Main content with tabs
-    with ui.element('div').classes('p-6').style(f'background: {COLORS["bg_primary"]}; min-height: 100vh;'):
+    with ui.element('div').classes('w-full p-6').style(f'background: {COLORS["bg_primary"]}; min-height: 100vh; width: 100%;'):
         
         with ui.tabs().classes('w-full') as tabs:
             single_tab = ui.tab('single', label='Single File', icon='description')
@@ -233,7 +235,7 @@ def main_page():
 
 def create_single_file_panel():
     """Create single file analysis panel"""
-    with ui.element('div').classes('flex gap-6'):
+    with ui.element('div').classes('w-full flex gap-6'):
         # Left column - Configuration
         with ui.element('div').classes('w-80'):
             with ui.element('div').classes('glass-card p-4 mb-4'):
@@ -315,7 +317,7 @@ def create_single_file_panel():
 
 def create_quick_scan_panel():
     """Create quick scan panel"""
-    with ui.element('div').classes('flex gap-6'):
+    with ui.element('div').classes('w-full flex gap-6'):
         # Left column
         with ui.element('div').classes('w-80'):
             with ui.element('div').classes('glass-card p-4'):
@@ -348,7 +350,7 @@ def create_quick_scan_panel():
 
 def create_multi_agent_panel():
     """Create multi-agent workflow panel"""
-    with ui.element('div').classes('flex gap-6'):
+    with ui.element('div').classes('w-full flex gap-6'):
         # Left column
         with ui.element('div').classes('w-80'):
             with ui.element('div').classes('glass-card p-4 mb-4'):
@@ -395,15 +397,15 @@ def create_multi_agent_panel():
 
 def create_ai_chat_panel():
     """Create AI chat panel for interactive code assistance"""
-    with ui.element('div').classes('flex gap-6 h-full'):
+    with ui.element('div').classes('w-full flex gap-6 h-full'):
         # Chat area
         with ui.element('div').classes('flex-grow flex flex-col'):
             with ui.element('div').classes('glass-card p-4 flex-grow').style('min-height: 500px; display: flex; flex-direction: column;'):
                 ui.label('AI Code Assistant').classes('text-lg font-bold mb-4').style(f'color: {COLORS["llm"]}')
                 
                 # Chat messages container
-                chat_container = ui.element('div').classes('flex-grow').style(
-                    f'overflow-y: auto; background: {COLORS["bg_secondary"]}; border-radius: 8px; padding: 16px;'
+                chat_container = ui.scroll_area().classes('flex-grow').style(
+                    f'background: {COLORS["bg_secondary"]}; border-radius: 8px; padding: 16px;'
                 )
                 with chat_container:
                     ChatMessage("system", "Hello! I'm your AI code assistant. Ask me anything about your code, and I can help you analyze, fix, or improve it.")
@@ -456,7 +458,7 @@ def create_ai_chat_panel():
 
 def create_settings_panel():
     """Create settings panel"""
-    with ui.element('div').classes('max-w-2xl mx-auto'):
+    with ui.element('div').classes('w-full max-w-4xl mx-auto'):
         with ui.element('div').classes('glass-card p-6'):
             ui.label('Settings').classes('text-2xl font-bold mb-6').style(f'color: {COLORS["primary"]}')
             
@@ -585,63 +587,96 @@ async def run_single_analysis(project: str, file_path: str, provider: str, auto_
         thread_id = str(uuid.uuid4())
         log_viewer.add_log(f"Thread: {thread_id[:8]}...", "info")
         
-        # Stream workflow
+        # Use queue to communicate between thread and async
+        update_queue = queue.Queue()
+        
+        def run_workflow_sync():
+            """Run workflow in a separate thread"""
+            try:
+                for update in workflow.stream_run(str(full_path), original_code, thread_id=thread_id):
+                    update_queue.put(('update', update))
+                update_queue.put(('done', None))
+            except Exception as e:
+                update_queue.put(('error', str(e)))
+        
+        # Start workflow in background thread
+        workflow_thread = threading.Thread(target=run_workflow_sync, daemon=True)
+        workflow_thread.start()
+        
+        # Process updates from queue
         step = 0
         current_node = None
         final_result = None
         
-        for update in workflow.stream_run(str(full_path), original_code, thread_id=thread_id):
-            step += 1
-            await asyncio.sleep(0.1)  # Allow UI updates
+        while True:
+            await asyncio.sleep(0.1)  # Keep event loop responsive
             
-            if update:
-                node_name = list(update.keys())[0]
-                node_data = update[node_name]
-                
-                if node_name != current_node:
-                    agent_name = node_name.replace("_node", "").upper()
-                    log_viewer.add_chat("system", f"Step {step}: {agent_name}")
-                    current_node = node_name
-                
-                if isinstance(node_data, dict):
-                    if node_data.get("code_analysis"):
-                        analysis = node_data["code_analysis"][:400]
-                        log_viewer.add_chat("analyzer", analysis, step)
-                    
-                    if "execution_success" in node_data:
-                        success = node_data["execution_success"]
-                        if success:
-                            log_viewer.add_log("Code executed successfully", "success")
-                        else:
-                            error = node_data.get("last_error", "Unknown error")[:200]
-                            log_viewer.add_chat("executor", f"Execution failed: {error}", step)
-                    
-                    if node_data.get("modification_history"):
-                        log_viewer.add_chat("fixer", "Applied code modification", step, True)
-                    
-                    final_result = node_data
-        
-        # Process final results
-        if final_result:
-            success = final_result.get("execution_success", False)
-            attempts = final_result.get("execution_attempts", 0)
-            
-            status_display.clear()
-            with status_display:
-                if success:
-                    StatusIndicator("success", "Complete", f"SUCCESS after {attempts} attempt(s)")
-                    log_viewer.add_log(f"SUCCESS after {attempts} attempt(s)", "success")
-                else:
-                    StatusIndicator("warning", "Complete", f"INCOMPLETE after {attempts} attempt(s)")
-                    log_viewer.add_log(f"INCOMPLETE after {attempts} attempt(s)", "warning")
-            
-            # Update code editor with final code
             try:
-                final_code = full_path.read_text(encoding='utf-8')
-                state.modified_code = final_code
-                code_editor.value = final_code
-            except:
-                pass
+                while True:
+                    msg_type, data = update_queue.get_nowait()
+                    
+                    if msg_type == 'done':
+                        # Process final results
+                        if final_result:
+                            success = final_result.get("execution_success", False)
+                            attempts = final_result.get("execution_attempts", 0)
+                            
+                            status_display.clear()
+                            with status_display:
+                                if success:
+                                    StatusIndicator("success", "Complete", f"SUCCESS after {attempts} attempt(s)")
+                                    log_viewer.add_log(f"SUCCESS after {attempts} attempt(s)", "success")
+                                else:
+                                    StatusIndicator("warning", "Complete", f"INCOMPLETE after {attempts} attempt(s)")
+                                    log_viewer.add_log(f"INCOMPLETE after {attempts} attempt(s)", "warning")
+                            
+                            # Update code editor with final code
+                            try:
+                                final_code = full_path.read_text(encoding='utf-8')
+                                state.modified_code = final_code
+                                code_editor.value = final_code
+                            except:
+                                pass
+                        state.is_running = False
+                        return
+                    
+                    elif msg_type == 'error':
+                        raise Exception(data)
+                    
+                    elif msg_type == 'update':
+                        update = data
+                        step += 1
+                        
+                        if update:
+                            node_name = list(update.keys())[0]
+                            node_data = update[node_name]
+                            
+                            if node_name != current_node:
+                                agent_name = node_name.replace("_node", "").upper()
+                                log_viewer.add_chat("system", f"Step {step}: {agent_name}")
+                                current_node = node_name
+                            
+                            if isinstance(node_data, dict):
+                                if node_data.get("code_analysis"):
+                                    analysis = node_data["code_analysis"][:400]
+                                    log_viewer.add_chat("analyzer", analysis, step)
+                                
+                                if "execution_success" in node_data:
+                                    success = node_data["execution_success"]
+                                    if success:
+                                        log_viewer.add_log("Code executed successfully", "success")
+                                    else:
+                                        error = node_data.get("last_error", "Unknown error")[:200]
+                                        log_viewer.add_chat("executor", f"Execution failed: {error}", step)
+                                
+                                if node_data.get("modification_history"):
+                                    log_viewer.add_chat("fixer", "Applied code modification", step, True)
+                                
+                                final_result = node_data
+                                
+            except queue.Empty:
+                if not workflow_thread.is_alive() and update_queue.empty():
+                    break
         
     except Exception as e:
         log_viewer.add_log(f"Error: {str(e)}", "error")
@@ -723,49 +758,85 @@ async def run_multi_agent(project: str, provider: str, status_container, log_vie
         step_count = 0
         current_agent = None
         
-        for update in repo_workflow.stream_run(str(project_path)):
-            step_count += 1
-            await asyncio.sleep(0.1)
+        # Use queue to communicate between thread and async
+        update_queue = queue.Queue()
+        
+        def run_workflow_sync():
+            """Run workflow in a separate thread"""
+            try:
+                for update in repo_workflow.stream_run(str(project_path)):
+                    update_queue.put(('update', update))
+                update_queue.put(('done', None))
+            except Exception as e:
+                update_queue.put(('error', str(e)))
+        
+        # Start workflow in background thread
+        workflow_thread = threading.Thread(target=run_workflow_sync, daemon=True)
+        workflow_thread.start()
+        
+        # Process updates from queue
+        while True:
+            await asyncio.sleep(0.1)  # Keep event loop responsive
             
-            if update:
-                node = list(update.keys())[0]
-                node_data = update.get(node, {})
-                
-                # Update workflow visualizer
-                if node != current_agent:
-                    current_agent = node
-                    wf_viz.set_active(node)
-                    log_viewer.add_chat("system", f"Step {step_count}: {node.upper()}")
-                
-                # Process step logs
-                if isinstance(node_data, dict):
-                    step_logs = node_data.get("step_logs", [])
-                    for sl in step_logs[-3:]:  # Show last 3 logs
-                        agent = sl.get("agent", "")
-                        turn = sl.get("turn", 0)
-                        log_type = sl.get("type", "")
+            # Process all available updates
+            try:
+                while True:
+                    msg_type, data = update_queue.get_nowait()
+                    
+                    if msg_type == 'done':
+                        # Complete
+                        wf_viz.complete(current_agent)
+                        status_container.clear()
+                        with status_container:
+                            StatusIndicator("success", "Complete", f"Finished in {step_count} steps")
+                        log_viewer.add_log(f"Workflow complete in {step_count} steps", "success")
+                        ui.notify('Multi-agent analysis complete', color='positive')
+                        state.is_running = False
+                        return
+                    
+                    elif msg_type == 'error':
+                        raise Exception(data)
+                    
+                    elif msg_type == 'update':
+                        update = data
+                        step_count += 1
                         
-                        if log_type == "llm_response":
-                            content = sl.get("content", "")[:300]
-                            has_tools = sl.get("has_tool_calls", False)
-                            log_viewer.add_chat(agent.lower(), content, turn, has_tools)
-                        elif log_type == "tool_call":
-                            tool = sl.get("tool", "unknown")
-                            result = sl.get("result", "")[:150]
-                            log_viewer.add_chat("tool", f"{tool}: {result}")
-            
-            if step_count > 30:
-                log_viewer.add_log("Reached iteration limit", "warning")
-                break
-        
-        # Complete
-        wf_viz.complete(current_agent)
-        status_container.clear()
-        with status_container:
-            StatusIndicator("success", "Complete", f"Finished in {step_count} steps")
-        
-        log_viewer.add_log(f"Workflow complete in {step_count} steps", "success")
-        ui.notify('Multi-agent analysis complete', color='positive')
+                        if update:
+                            node = list(update.keys())[0]
+                            node_data = update.get(node, {})
+                            
+                            # Update workflow visualizer
+                            if node != current_agent:
+                                current_agent = node
+                                wf_viz.set_active(node)
+                                log_viewer.add_chat("system", f"Step {step_count}: {node.upper()}")
+                            
+                            # Process step logs
+                            if isinstance(node_data, dict):
+                                step_logs = node_data.get("step_logs", [])
+                                for sl in step_logs[-3:]:  # Show last 3 logs
+                                    agent = sl.get("agent", "")
+                                    turn = sl.get("turn", 0)
+                                    log_type = sl.get("type", "")
+                                    
+                                    if log_type == "llm_response":
+                                        content = sl.get("content", "")[:300]
+                                        has_tools = sl.get("has_tool_calls", False)
+                                        log_viewer.add_chat(agent.lower(), content, turn, has_tools)
+                                    elif log_type == "tool_call":
+                                        tool = sl.get("tool", "unknown")
+                                        result = sl.get("result", "")[:150]
+                                        log_viewer.add_chat("tool", f"{tool}: {result}")
+                        
+                        if step_count > 30:
+                            log_viewer.add_log("Reached iteration limit", "warning")
+                            state.is_running = False
+                            return
+                            
+            except queue.Empty:
+                # No more updates available, continue waiting
+                if not workflow_thread.is_alive() and update_queue.empty():
+                    break
         
     except Exception as e:
         log_viewer.add_log(f"Error: {str(e)}", "error")

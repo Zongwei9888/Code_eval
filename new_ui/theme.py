@@ -76,6 +76,27 @@ body {
     background: var(--bg-primary) !important;
     color: var(--text-primary) !important;
     font-family: 'Inter', system-ui, sans-serif !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Ensure html element doesn't restrict width */
+html {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Fix Quasar layout container */
+#q-app, .q-layout, .q-page-container, .q-page {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Fix nicegui-content container */
+.nicegui-content > div {
+    width: 100% !important;
 }
 
 /* Scrollbar styling */
@@ -250,6 +271,36 @@ body {
 }
 .q-tab-panel {
     background: transparent !important;
+    width: 100% !important;
+}
+
+/* Fix NiceGUI/Quasar layout issues - ensure full width */
+.q-tab-panels {
+    width: 100% !important;
+}
+.q-tab-panels > .q-tab-panel {
+    width: 100% !important;
+}
+.q-page {
+    width: 100% !important;
+}
+.nicegui-content {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+.q-page-container {
+    width: 100% !important;
+}
+
+/* Ensure flex containers expand properly */
+.flex-grow {
+    flex-grow: 1 !important;
+    min-width: 0 !important;
+}
+
+/* Fix main content container */
+main, .q-layout__page {
+    width: 100% !important;
 }
 
 /* Input styling */
