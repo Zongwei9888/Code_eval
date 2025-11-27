@@ -1,170 +1,191 @@
 """
-Multi-Agent Repository Analysis Workflow
-Clean implementation using LangGraph with proper separation of concerns
+Autonomous Multi-Agent Repository Analysis System
 
-Architecture:
-+-----------------------------------------------------------------+
-|                      WORKFLOW FLOW                               |
-+-----------------------------------------------------------------+
-|                                                                  |
-|   START -> Scanner -> Analyzer -> has_errors? --+-> Reporter     |
-|                           ^                     |       |        |
-|                           |                     v       v        |
-|                           |                   Fixer    END       |
-|                           |                     |                |
-|                           |                     v                |
-|                           |                 Executor             |
-|                           |                     |                |
-|                           |           +---------+---------+      |
-|                           |           |                   |      |
-|                           |        success?            failed    |
-|                           |           |                   |      |
-|                           |           v                   |      |
-|                           |       Reporter                |      |
-|                           |                               |      |
-|                           +-------------------------------+      |
-|                            (retry if attempts < max)             |
-+-----------------------------------------------------------------+
+这是真正的自主代理系统，不是硬编码的workflow！
+
+核心架构：
+┌─────────────────────────────────────────────────────────────────────────┐
+│                   AUTONOMOUS AGENT SYSTEM                                │
+│                                                                          │
+│    ┌─────────────────────────────────────────────────────────────┐      │
+│    │                    SUPERVISOR NODE                          │      │
+│    │   ┌───────────────────────────────────────────────────┐     │      │
+│    │   │  1. Observe shared state                          │     │      │
+│    │   │  2. LLM reasoning: What should I do next?         │     │      │
+│    │   │  3. Decision: {next: "agent", task: "..."}        │     │      │
+│    │   └───────────────────────────────────────────────────┘     │      │
+│    └─────────────────────────────────────────────────────────────┘      │
+│                              │                                           │
+│      ┌───────────┬───────────┼───────────┬───────────┐                  │
+│      v           v           v           v           v                  │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐                │
+│  │Planner │ │Research│ │Scanner │ │Analyzer│ │ Fixer  │                │
+│  └────┬───┘ └────┬───┘ └────┬───┘ └────┬───┘ └────┬───┘                │
+│       │          │          │          │          │                     │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐                │
+│  │Executor│ │ Tester │ │Reviewer│ │Environ │ │  Git   │                │
+│  └────┬───┘ └────┬───┘ └────┬───┘ └────┬───┘ └────┬───┘                │
+│       │          │          │          │          │                     │
+│       └──────────┴──────────┴──────────┴──────────┘                     │
+│                              │                                           │
+│                              v                                           │
+│                   (Return to SUPERVISOR)                                 │
+│                              │                                           │
+│              ┌───────────────┴───────────────┐                          │
+│              v                               v                          │
+│         Continue?                          FINISH                        │
+│         (loop back)                         (END)                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+关键特性：
+1. Supervisor LLM自主决策下一步
+2. 每个Agent有专门的工具集
+3. 动态路由，不是硬编码流程
+4. 支持反馈循环和策略调整
 """
+
 import json
-from pathlib import Path
-from typing import Dict, Any, Optional, Literal, List
+import re
 from datetime import datetime
+from typing import Dict, Any, Optional, List
+from pathlib import Path
 
 from langchain_core.messages import (
-    HumanMessage, SystemMessage, AIMessage, ToolMessage, AnyMessage
+    HumanMessage, SystemMessage, AIMessage, ToolMessage
 )
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from config import get_llm
-from agent.state import RepoWorkflowState, create_repo_workflow_state
-from prompt.repo_prompts import (
-    REPO_SCANNER_SYSTEM_PROMPT,
-    REPO_ANALYZER_SYSTEM_PROMPT,
-    REPO_FIXER_SYSTEM_PROMPT,
-    REPO_EXECUTOR_SYSTEM_PROMPT,
-    REPO_REPORTER_SYSTEM_PROMPT,
-    format_scan_prompt,
-    format_analyze_prompt,
-    format_fix_prompt,
-    format_execute_prompt
+from agent.state import TrueAgentState, create_true_agent_state
+from prompt.supervisor_prompts import (
+    SUPERVISOR_SYSTEM_PROMPT,
+    format_state_summary,
+    format_agent_prompt,
+    get_available_agents
 )
-from tools.repo_tools import (
-    ALL_REPO_TOOLS,
-    SCANNER_TOOLS,
-    ANALYZER_TOOLS,
-    FIXER_TOOLS,
-    EXECUTOR_TOOLS
+from tools.agent_tools import (
+    get_tools_for_agent,
+    AGENT_CAPABILITIES
 )
 
 
 # ============================================================================
-# AGENT EXECUTOR - Creates multi-turn agent with tool calling
+# SPECIALIST AGENT EXECUTOR
 # ============================================================================
 
-def create_agent_executor(
+def create_specialist_executor(
     llm,
-    tools: List,
-    system_prompt: str,
     agent_name: str,
-    max_turns: int = 10
+    max_turns: int = 100
 ):
     """
-    Create an agent that can have multi-turn conversations with tool use.
-    Uses a ReAct-style loop: Think -> Act -> Observe -> (repeat)
+    创建专家代理执行器
+    
+    每个代理有自己专属的工具集！
     
     Args:
-        llm: Language model instance
-        tools: List of tools available to the agent
-        system_prompt: System prompt for the agent
-        agent_name: Name for logging
-        max_turns: Maximum conversation turns
+        llm: LLM实例
+        agent_name: 代理名称
+        max_turns: 最大工具调用轮数
         
     Returns:
-        Agent executor function
+        执行器函数
     """
-    has_tools = bool(tools)
+    # 获取该代理专属的工具
+    tools = get_tools_for_agent(agent_name)
     llm_with_tools = llm.bind_tools(tools) if tools else llm
     
-    def agent_executor(state: RepoWorkflowState) -> Dict[str, Any]:
-        messages = list(state["messages"])
-        step_logs = list(state.get("step_logs", []))
+    def executor(state: TrueAgentState, task: str) -> Dict[str, Any]:
+        """执行代理任务并返回结果"""
         
-        # Add system prompt
-        agent_messages = [SystemMessage(content=system_prompt)]
+        # 获取代理专用提示词
+        error_context = ""
+        if agent_name == "fixer":
+            errors = state.get("syntax_errors", []) + state.get("runtime_errors", [])
+            if errors:
+                error_context = json.dumps(errors[-1], indent=2)
         
-        # Add relevant context from history
-        for msg in messages[-20:]:
-            if not has_tools:
-                # Skip ToolMessage for agents without tools
-                if isinstance(msg, ToolMessage):
-                    continue
-                # Skip AIMessage with tool_calls
-                if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
-                    if msg.content:
-                        agent_messages.append(AIMessage(content=msg.content))
-                    continue
-            agent_messages.append(msg)
+        agent_prompt = format_agent_prompt(agent_name, task, {"error_context": error_context})
         
+        # 构建消息历史
+        messages = [
+            SystemMessage(content=agent_prompt)
+        ]
+        
+        # 添加最近上下文
+        for msg in state.get("messages", [])[-10:]:
+            if isinstance(msg, ToolMessage):
+                continue
+            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                continue
+            messages.append(msg)
+        
+        # 添加当前任务
+        messages.append(HumanMessage(
+            content=f"Task: {task}\n\nProject path: {state['project_path']}"
+        ))
+        
+        # 工具调用循环
         turn = 0
-        final_response = None
+        results = []
+        step_logs = []
         
         while turn < max_turns:
             turn += 1
             
-            # Call LLM
-            response = llm_with_tools.invoke(agent_messages)
-            agent_messages.append(response)
+            response = llm_with_tools.invoke(messages)
+            messages.append(response)
             
-            # Log response
             content = response.content if hasattr(response, 'content') else str(response)
-            safe_content = content.encode('ascii', 'ignore').decode('ascii')
             
-            log_entry = {
+            # 记录日志
+            print(f"\n  [{agent_name.upper()}] Turn {turn}")
+            safe_content = content.encode('ascii', 'ignore').decode('ascii')
+            print(f"    Response: {safe_content[:150]}...")
+            
+            # 记录步骤日志（供UI使用）
+            step_logs.append({
                 "agent": agent_name,
                 "turn": turn,
                 "type": "llm_response",
-                "content": safe_content[:500],
-                "has_tool_calls": bool(response.tool_calls) if hasattr(response, 'tool_calls') else False,
+                "content": content[:500],
+                "has_tool_calls": bool(hasattr(response, 'tool_calls') and response.tool_calls),
                 "timestamp": datetime.now().isoformat()
-            }
-            step_logs.append(log_entry)
+            })
             
-            print(f"\n[{agent_name}] Turn {turn}:")
-            print(f"  Response: {safe_content[:200]}...")
-            
-            # Check if agent wants to use tools
-            if not response.tool_calls:
-                final_response = response
-                print(f"  [Done - no more tool calls]")
+            # 检查是否有工具调用
+            if not hasattr(response, 'tool_calls') or not response.tool_calls:
+                results.append({"type": "response", "content": content})
                 break
             
-            # Execute tool calls
-            print(f"  Tool calls: {[tc['name'] for tc in response.tool_calls]}")
-            
+            # 执行工具
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
                 
-                # Find and execute tool
+                # 查找并执行工具
                 result = f"Tool {tool_name} not found"
                 for t in tools:
                     if t.name == tool_name:
                         try:
                             result = t.invoke(tool_args)
-                            safe_result = str(result).encode('ascii', 'ignore').decode('ascii')
-                            print(f"    {tool_name}: {safe_result[:100]}...")
+                            print(f"    Tool [{tool_name}]: OK")
                         except Exception as e:
                             result = f"Error: {str(e)}"
-                            print(f"    {tool_name}: ERROR - {str(e)}")
+                            print(f"    Tool [{tool_name}]: ERROR - {str(e)}")
                         break
                 
-                # Add tool result to conversation
-                agent_messages.append(
+                messages.append(
                     ToolMessage(content=str(result), tool_call_id=tool_call["id"])
                 )
+                results.append({
+                    "type": "tool_result",
+                    "tool": tool_name,
+                    "result": str(result)[:1000]
+                })
                 
+                # 记录工具调用日志
                 step_logs.append({
                     "agent": agent_name,
                     "turn": turn,
@@ -174,344 +195,509 @@ def create_agent_executor(
                     "timestamp": datetime.now().isoformat()
                 })
         
-        # Return updated state
-        new_messages = agent_messages[1:]  # Exclude system prompt
-        
         return {
-            "messages": new_messages,
+            "agent": agent_name,
+            "task": task,
+            "results": results,
+            "messages": messages[1:],
             "step_logs": step_logs
         }
     
-    return agent_executor
+    return executor
 
 
 # ============================================================================
-# MULTI-AGENT WORKFLOW
+# AUTONOMOUS AGENT CLASS
 # ============================================================================
 
-class MultiAgentRepoWorkflow:
+class AutonomousRepoAgent:
     """
-    Multi-agent workflow for repository analysis with proper feedback loops.
+    自主代码仓库分析代理
     
-    Flow:
-    1. Scanner -> Find files
-    2. Analyzer -> Check all files for errors
-    3. If errors:
-       a. Fixer -> Fix the code
-       b. Executor -> Run the code
-       c. If failed and attempts < max: Go back to Fixer
-       d. If success or max attempts: Go to Reporter
-    4. Reporter -> Generate final report
+    这是真正的自主代理系统！
+    
+    核心特性：
+    1. Supervisor LLM观察状态并自主决策
+    2. 每个专家代理有专属工具集
+    3. 动态路由而非硬编码流程
+    4. 支持10种专家代理
     """
     
-    def __init__(self, llm_provider: str = "openrouter", max_fix_attempts: int = 5):
+    # 所有可用代理
+    AVAILABLE_AGENTS = [
+        "planner", "researcher", "scanner", "analyzer", "fixer",
+        "executor", "tester", "reviewer", "environment", "git"
+    ]
+    
+    def __init__(
+        self,
+        llm_provider: str = "openrouter",
+        max_iterations: int = 20
+    ):
         """
-        Initialize the multi-agent workflow.
+        初始化自主代理系统
         
         Args:
-            llm_provider: LLM provider to use
-            max_fix_attempts: Maximum fix attempts per file
+            llm_provider: LLM提供商
+            max_iterations: 最大迭代次数
         """
         self.llm_provider = llm_provider
-        self.max_fix_attempts = max_fix_attempts
+        self.max_iterations = max_iterations
         
-        # Create LLMs
-        self.llm = get_llm(llm_provider, "default")
-        self.fast_llm = get_llm(llm_provider, "fast")
-        self.powerful_llm = get_llm(llm_provider, "powerful")
+        # 创建LLM实例
+        self.supervisor_llm = get_llm(llm_provider, "powerful")  # 用于决策
+        self.worker_llm = get_llm(llm_provider, "default")  # 用于执行
         
-        # Memory saver for conversation persistence
+        # 创建所有专家代理执行器
+        self.specialists = {}
+        for agent_name in self.AVAILABLE_AGENTS:
+            # Fixer使用更强的模型
+            llm = self.supervisor_llm if agent_name == "fixer" else self.worker_llm
+            max_turns = 8 if agent_name in ["fixer", "researcher"] else 5
+            
+            self.specialists[agent_name] = create_specialist_executor(
+                llm, agent_name, max_turns=max_turns
+            )
+        
+        # 内存检查点
         self.memory = MemorySaver()
         
-        # Build workflow
+        # 构建图
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
-        """Build the workflow graph with feedback loops"""
+        """
+        构建代理图
         
-        workflow = StateGraph(RepoWorkflowState)
+        关键：所有代理都返回给Supervisor，由其决定下一步
+        """
+        workflow = StateGraph(TrueAgentState)
         
-        # Create agent executors
-        scanner = create_agent_executor(
-            self.fast_llm, ALL_REPO_TOOLS, REPO_SCANNER_SYSTEM_PROMPT, "Scanner", max_turns=3
-        )
-        analyzer = create_agent_executor(
-            self.llm, ALL_REPO_TOOLS, REPO_ANALYZER_SYSTEM_PROMPT, "Analyzer", max_turns=15
-        )
-        fixer = create_agent_executor(
-            self.powerful_llm, ALL_REPO_TOOLS, REPO_FIXER_SYSTEM_PROMPT, "Fixer", max_turns=8
-        )
-        executor = create_agent_executor(
-            self.fast_llm, ALL_REPO_TOOLS, REPO_EXECUTOR_SYSTEM_PROMPT, "Executor", max_turns=3
-        )
-        reporter = create_agent_executor(
-            self.llm, [], REPO_REPORTER_SYSTEM_PROMPT, "Reporter", max_turns=2
-        )
+        # 添加Supervisor节点
+        workflow.add_node("supervisor", self._supervisor_node)
         
-        # Add nodes
-        workflow.add_node("scanner", self._scanner_wrapper(scanner))
-        workflow.add_node("analyzer", self._analyzer_wrapper(analyzer))
-        workflow.add_node("fixer", self._fixer_wrapper(fixer))
-        workflow.add_node("executor", self._executor_wrapper(executor))
-        workflow.add_node("reporter", reporter)
+        # 添加所有专家代理节点
+        for agent_name in self.AVAILABLE_AGENTS:
+            node_func = self._create_agent_node(agent_name)
+            workflow.add_node(agent_name, node_func)
         
-        # Define edges
-        workflow.add_edge(START, "scanner")
-        workflow.add_edge("scanner", "analyzer")
+        # 入口点 -> Supervisor
+        workflow.add_edge(START, "supervisor")
         
-        # After analyzer: check if there are errors to fix
+        # Supervisor -> 动态路由（LLM决定！）
+        routing_map = {agent: agent for agent in self.AVAILABLE_AGENTS}
+        routing_map["FINISH"] = END
+        
         workflow.add_conditional_edges(
-            "analyzer",
-            self._has_errors,
-            {
-                "has_errors": "fixer",
-                "no_errors": "reporter"
-            }
+            "supervisor",
+            self._route_by_supervisor,
+            routing_map
         )
         
-        # After fixer: execute to verify
-        workflow.add_edge("fixer", "executor")
-        
-        # After executor: check result and decide next step
-        workflow.add_conditional_edges(
-            "executor",
-            self._execution_decision,
-            {
-                "success": "reporter",
-                "retry": "fixer",
-                "give_up": "reporter"
-            }
-        )
-        
-        workflow.add_edge("reporter", END)
+        # 所有专家代理 -> 返回Supervisor（反馈循环）
+        for agent_name in self.AVAILABLE_AGENTS:
+            workflow.add_edge(agent_name, "supervisor")
         
         return workflow.compile(checkpointer=self.memory)
     
-    def _scanner_wrapper(self, scanner_fn):
-        """Wrapper to process scanner results"""
-        def wrapper(state: RepoWorkflowState) -> Dict[str, Any]:
-            project_path = state["project_path"]
-            state["messages"] = state.get("messages", []) + [
-                HumanMessage(content=format_scan_prompt(project_path))
-            ]
-            
-            result = scanner_fn(state)
-            
-            # Parse scan results from messages
-            python_files = []
-            test_files = []
-            
-            for msg in result.get("messages", []):
-                content = msg.content if hasattr(msg, 'content') else str(msg)
-                if "python_files" in content:
-                    try:
-                        start = content.find('{')
-                        end = content.rfind('}') + 1
-                        if start >= 0 and end > start:
-                            data = json.loads(content[start:end])
-                            python_files = data.get("python_files", [])
-                            test_files = data.get("test_files", [])
-                    except:
-                        pass
-            
-            result["python_files"] = python_files
-            result["test_files"] = test_files
-            
-            return result
+    def _create_agent_node(self, agent_name: str):
+        """为指定代理创建节点函数"""
         
-        return wrapper
-    
-    def _analyzer_wrapper(self, analyzer_fn):
-        """Wrapper to process analyzer results"""
-        def wrapper(state: RepoWorkflowState) -> Dict[str, Any]:
-            files = state.get("python_files", [])
-            project_path = state["project_path"]
+        def node(state: TrueAgentState) -> Dict[str, Any]:
+            """专家代理节点"""
+            task = state.get("current_task", f"Execute {agent_name} task")
+            result = self.specialists[agent_name](state, task)
             
-            state["messages"] = state.get("messages", []) + [
-                HumanMessage(content=format_analyze_prompt(project_path, files))
-            ]
-            
-            result = analyzer_fn(state)
-            
-            # Parse for files with errors
-            files_with_errors = []
-            for msg in result.get("messages", []):
-                content = msg.content if hasattr(msg, 'content') else str(msg)
-                if '"valid": false' in content.lower() or '"valid":false' in content.lower():
-                    try:
-                        start = content.find('{')
-                        end = content.rfind('}') + 1
-                        if start >= 0 and end > start:
-                            data = json.loads(content[start:end])
-                            if not data.get("valid", True):
-                                files_with_errors.append({
-                                    "file": data.get("file", "unknown"),
-                                    "error": data.get("error", "unknown error"),
-                                    "line": data.get("line_number")
-                                })
-                    except:
-                        pass
-            
-            result["files_with_errors"] = files_with_errors
-            if files_with_errors:
-                result["current_file"] = files_with_errors[0]["file"]
-            
-            return result
+            # 解析结果更新状态
+            return self._process_agent_result(agent_name, state, result)
         
-        return wrapper
+        return node
     
-    def _fixer_wrapper(self, fixer_fn):
-        """Wrapper to track fix attempts"""
-        def wrapper(state: RepoWorkflowState) -> Dict[str, Any]:
-            current_file = state.get("current_file")
-            errors = state.get("files_with_errors", [])
-            attempt = state.get("fix_attempts", 0) + 1
-            
-            # Find current error
-            error_info = "Unknown error"
-            for err in errors:
-                if err.get("file") == current_file:
-                    error_info = err.get("error", "Unknown error")
-                    break
-            
-            state["messages"] = state.get("messages", []) + [
-                HumanMessage(content=format_fix_prompt(attempt, current_file, error_info))
-            ]
-            
-            result = fixer_fn(state)
-            result["fix_attempts"] = attempt
-            
-            # Track fix
-            fixes = list(state.get("fixes_applied", []))
-            fixes.append({
-                "file": current_file,
-                "attempt": attempt,
-                "timestamp": datetime.now().isoformat()
-            })
-            result["fixes_applied"] = fixes
-            
-            return result
-        
-        return wrapper
-    
-    def _executor_wrapper(self, executor_fn):
-        """Wrapper to track execution results"""
-        def wrapper(state: RepoWorkflowState) -> Dict[str, Any]:
-            current_file = state.get("current_file")
-            project_path = state["project_path"]
-            
-            # Build full path
-            if current_file and not Path(current_file).is_absolute():
-                full_path = str(Path(project_path) / current_file)
-            else:
-                full_path = current_file or project_path
-            
-            state["messages"] = state.get("messages", []) + [
-                HumanMessage(content=format_execute_prompt(full_path))
-            ]
-            
-            result = executor_fn(state)
-            
-            # Parse execution result
-            success = False
-            for msg in reversed(result.get("messages", [])[-5:]):
-                content = msg.content if hasattr(msg, 'content') else str(msg)
-                if '"success": true' in content.lower() or '"success":true' in content.lower():
-                    success = True
-                    break
-                if '"success": false' in content.lower() or '"success":false' in content.lower():
-                    success = False
-                    break
-            
-            result["last_execution_success"] = success
-            
-            # Track result
-            exec_results = list(state.get("execution_results", []))
-            exec_results.append({
-                "file": current_file,
-                "success": success,
-                "attempt": state.get("fix_attempts", 0),
-                "timestamp": datetime.now().isoformat()
-            })
-            result["execution_results"] = exec_results
-            
-            return result
-        
-        return wrapper
-    
-    def _has_errors(self, state: RepoWorkflowState) -> Literal["has_errors", "no_errors"]:
-        """Check if there are files with errors"""
-        errors = state.get("files_with_errors", [])
-        
-        if errors:
-            print(f"\n[Decision] Found {len(errors)} file(s) with errors -> Go to Fixer")
-            return "has_errors"
-        else:
-            print(f"\n[Decision] No errors found -> Go to Reporter")
-            return "no_errors"
-    
-    def _execution_decision(self, state: RepoWorkflowState) -> Literal["success", "retry", "give_up"]:
-        """Decide what to do after execution"""
-        success = state.get("last_execution_success", False)
-        attempts = state.get("fix_attempts", 0)
-        max_attempts = state.get("max_fix_attempts", self.max_fix_attempts)
-        
-        if success:
-            print(f"\n[Decision] Execution SUCCESS -> Go to Reporter")
-            return "success"
-        elif attempts < max_attempts:
-            print(f"\n[Decision] Execution FAILED (attempt {attempts}/{max_attempts}) -> Retry Fixer")
-            return "retry"
-        else:
-            print(f"\n[Decision] Max attempts ({max_attempts}) reached -> Go to Reporter")
-            return "give_up"
-    
-    def run(self, project_path: str, thread_id: Optional[str] = None) -> Dict[str, Any]:
+    def _supervisor_node(self, state: TrueAgentState) -> Dict[str, Any]:
         """
-        Run the workflow on a project.
+        Supervisor节点 - 系统的大脑
+        
+        自主决策流程：
+        1. 观察当前状态
+        2. LLM推理下一步
+        3. 返回决策结果
+        """
+        iteration = state.get("iteration_count", 0) + 1
+        max_iter = state.get("max_iterations", self.max_iterations)
+        
+        print(f"\n{'='*70}")
+        print(f"  SUPERVISOR - Iteration {iteration}/{max_iter}")
+        print(f"{'='*70}")
+        
+        # 检查循环限制
+        if iteration > max_iter:
+            print("  [!] Max iterations reached - FINISHING")
+            return {
+                "supervisor_decision": "FINISH",
+                "supervisor_reasoning": "Maximum iterations reached",
+                "iteration_count": iteration
+            }
+        
+        # 检查目标是否达成
+        if state.get("goal_achieved", False):
+            print("  [+] Goal achieved - FINISHING")
+            return {
+                "supervisor_decision": "FINISH",
+                "supervisor_reasoning": "Goal has been achieved",
+                "iteration_count": iteration
+            }
+        
+        # 格式化状态摘要给LLM
+        state_summary = format_state_summary(state)
+        
+        # 询问Supervisor LLM做决策
+        messages = [
+            SystemMessage(content=SUPERVISOR_SYSTEM_PROMPT),
+            HumanMessage(content=state_summary)
+        ]
+        
+        response = self.supervisor_llm.invoke(messages)
+        content = response.content
+        
+        print(f"\n  [Supervisor Thinking]")
+        safe_content = content.encode('ascii', 'ignore').decode('ascii')
+        print(f"    {safe_content[:300]}...")
+        
+        # 解析决策
+        decision = self._parse_supervisor_decision(content)
+        
+        print(f"\n  [Decision] -> {decision['decision']}")
+        print(f"  [Reasoning] {decision['reasoning'][:100]}...")
+        
+        # 记录决策
+        decision_record = {
+            "iteration": iteration,
+            "decision": decision["decision"],
+            "reasoning": decision["reasoning"],
+            "task": decision.get("task_for_agent", ""),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        decision_history = list(state.get("decision_history", []))
+        decision_history.append(decision_record)
+        
+        # 更新步骤日志
+        step_logs = list(state.get("step_logs", []))
+        step_logs.append({
+            "agent": "supervisor",
+            "action": f"decided: {decision['decision']}",
+            "reasoning": decision["reasoning"][:200],
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return {
+            "supervisor_decision": decision["decision"],
+            "supervisor_reasoning": decision["reasoning"],
+            "current_task": decision.get("task_for_agent", ""),
+            "decision_history": decision_history,
+            "iteration_count": iteration,
+            "step_logs": step_logs,
+            "messages": [response]
+        }
+    
+    def _parse_supervisor_decision(self, content: str) -> Dict[str, Any]:
+        """解析Supervisor的决策"""
+        
+        # 尝试提取JSON
+        try:
+            json_match = re.search(r'\{[^{}]*"decision"[^{}]*\}', content, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+        
+        # 回退：查找关键词
+        content_lower = content.lower()
+        
+        decision = "FINISH"
+        reasoning = content[:200]
+        
+        for agent in self.AVAILABLE_AGENTS:
+            if agent in content_lower:
+                decision = agent
+                break
+        
+        if "finish" in content_lower or "done" in content_lower or "complete" in content_lower:
+            decision = "FINISH"
+        
+        return {
+            "reasoning": reasoning,
+            "decision": decision,
+            "task_for_agent": content[:300],
+            "confidence": "medium"
+        }
+    
+    def _route_by_supervisor(self, state: TrueAgentState) -> str:
+        """
+        基于Supervisor决策路由
+        
+        这是与硬编码workflow的关键区别：
+        - 旧: if errors -> fixer else -> reporter
+        - 新: return state["supervisor_decision"]
+        """
+        decision = state.get("supervisor_decision", "FINISH")
+        valid_decisions = self.AVAILABLE_AGENTS + ["FINISH"]
+        
+        if decision not in valid_decisions:
+            print(f"  [!] Invalid decision '{decision}', defaulting to FINISH")
+            return "FINISH"
+        
+        return decision
+    
+    def _process_agent_result(
+        self, 
+        agent_name: str, 
+        state: TrueAgentState, 
+        result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """处理代理结果并更新状态"""
+        
+        updates = {
+            "messages": result.get("messages", []),
+            "step_logs": list(state.get("step_logs", [])) + result.get("step_logs", [])
+        }
+        
+        # 根据代理类型处理结果
+        if agent_name == "scanner":
+            updates.update(self._process_scanner_result(state, result))
+        elif agent_name == "analyzer":
+            updates.update(self._process_analyzer_result(state, result))
+        elif agent_name == "fixer":
+            updates.update(self._process_fixer_result(state, result))
+        elif agent_name == "executor":
+            updates.update(self._process_executor_result(state, result))
+        elif agent_name == "tester":
+            updates.update(self._process_tester_result(state, result))
+        
+        # 添加通用日志
+        updates["step_logs"].append({
+            "agent": agent_name,
+            "action": f"completed task",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return updates
+    
+    def _process_scanner_result(self, state, result) -> Dict[str, Any]:
+        """处理Scanner结果"""
+        python_files = []
+        test_files = []
+        
+        for r in result.get("results", []):
+            if r.get("type") == "tool_result" and r.get("tool") == "scan_project":
+                try:
+                    data = json.loads(r.get("result", "{}"))
+                    python_files = data.get("python_files", [])
+                    test_files = data.get("test_files", [])
+                except:
+                    pass
+        
+        return {
+            "python_files": python_files,
+            "test_files": test_files,
+        }
+    
+    def _process_analyzer_result(self, state, result) -> Dict[str, Any]:
+        """处理Analyzer结果"""
+        syntax_errors = list(state.get("syntax_errors", []))
+        
+        for r in result.get("results", []):
+            if r.get("type") == "tool_result" and "check" in r.get("tool", ""):
+                try:
+                    data = json.loads(r.get("result", "{}"))
+                    if not data.get("valid", True):
+                        syntax_errors.append({
+                            "file": data.get("file", "unknown"),
+                            "error": data.get("error", "unknown"),
+                            "line": data.get("line_number")
+                        })
+                except:
+                    pass
+        
+        current_file = state.get("current_file")
+        if syntax_errors and not current_file:
+            current_file = syntax_errors[0].get("file")
+        
+        return {
+            "syntax_errors": syntax_errors,
+            "current_file": current_file,
+        }
+    
+    def _process_fixer_result(self, state, result) -> Dict[str, Any]:
+        """处理Fixer结果"""
+        current_file = state.get("current_file")
+        task = state.get("current_task", "")
+        
+        modifications = list(state.get("modifications", []))
+        modifications.append({
+            "file": current_file,
+            "task": task,
+            "agent": "fixer",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # 检查是否使用了str_replace（正确的方式）
+        used_str_replace = any(
+            r.get("tool") == "str_replace" 
+            for r in result.get("results", []) 
+            if r.get("type") == "tool_result"
+        )
+        
+        return {
+            "modifications": modifications,
+            "used_precise_edit": used_str_replace,
+        }
+    
+    def _process_executor_result(self, state, result) -> Dict[str, Any]:
+        """处理Executor结果"""
+        current_file = state.get("current_file")
+        success = False
+        error_message = ""
+        
+        for r in result.get("results", []):
+            if r.get("type") == "tool_result" and "execute" in r.get("tool", ""):
+                try:
+                    data = json.loads(r.get("result", "{}"))
+                    success = data.get("success", False)
+                    if not success:
+                        error_message = data.get("stderr", "") or data.get("error", "")
+                except:
+                    pass
+        
+        execution_history = list(state.get("execution_history", []))
+        execution_history.append({
+            "file": current_file,
+            "success": success,
+            "error": error_message[:500],
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        runtime_errors = list(state.get("runtime_errors", []))
+        if not success and error_message:
+            runtime_errors.append({
+                "file": current_file,
+                "error": error_message[:500],
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        # 判断目标是否达成
+        goal_achieved = success and not state.get("syntax_errors") and not runtime_errors
+        
+        return {
+            "execution_history": execution_history,
+            "last_execution_success": success,
+            "last_error_message": error_message,
+            "runtime_errors": runtime_errors,
+            "goal_achieved": goal_achieved,
+        }
+    
+    def _process_tester_result(self, state, result) -> Dict[str, Any]:
+        """处理Tester结果"""
+        test_failures = list(state.get("test_failures", []))
+        
+        for r in result.get("results", []):
+            if r.get("type") == "tool_result":
+                try:
+                    data = json.loads(r.get("result", "{}"))
+                    if not data.get("success", True):
+                        test_failures.append({
+                            "output": data.get("output", "")[:500],
+                            "timestamp": datetime.now().isoformat()
+                        })
+                except:
+                    pass
+        
+        return {
+            "test_failures": test_failures,
+        }
+    
+    def run(
+        self,
+        project_path: str,
+        user_request: str = "Analyze the project and fix any code issues",
+        thread_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        运行自主代理
         
         Args:
-            project_path: Path to the project directory
-            thread_id: Optional thread ID for session management
+            project_path: 项目路径
+            user_request: 用户请求
+            thread_id: 线程ID（可选）
             
         Returns:
-            Final state dictionary
+            最终状态
         """
         import uuid
         
         if thread_id is None:
             thread_id = str(uuid.uuid4())
         
-        initial_state = create_repo_workflow_state(project_path, self.max_fix_attempts)
+        # 创建初始状态
+        initial_state = create_true_agent_state(
+            project_path=project_path,
+            user_request=user_request,
+            max_iterations=self.max_iterations
+        )
+        
         config = {"configurable": {"thread_id": thread_id}}
         
         print(f"\n{'='*70}")
-        print(f"  MULTI-AGENT REPOSITORY ANALYSIS WORKFLOW")
+        print(f"  AUTONOMOUS AGENT SYSTEM")
         print(f"{'='*70}")
         print(f"  Project: {project_path}")
+        print(f"  Request: {user_request}")
         print(f"  Thread:  {thread_id}")
-        print(f"  Max Fix Attempts: {self.max_fix_attempts}")
+        print(f"  Max Iterations: {self.max_iterations}")
+        print(f"  Available Agents: {len(self.AVAILABLE_AGENTS)}")
+        print(f"{'='*70}")
+        print(f"\n  Supervisor LLM decides each step dynamically")
+        print(f"  Each agent has specialized tools")
         print(f"{'='*70}\n")
         
-        return self.graph.invoke(initial_state, config)
-    
-    def stream_run(self, project_path: str, thread_id: Optional[str] = None):
-        """
-        Stream the workflow execution.
+        # 运行代理
+        final_state = self.graph.invoke(initial_state, config)
         
-        Args:
-            project_path: Path to the project directory
-            thread_id: Optional thread ID for session management
-            
+        # 打印摘要
+        print(f"\n{'='*70}")
+        print(f"  AGENT COMPLETE")
+        print(f"{'='*70}")
+        print(f"  Iterations: {final_state.get('iteration_count', 0)}")
+        print(f"  Decisions made: {len(final_state.get('decision_history', []))}")
+        print(f"  Modifications: {len(final_state.get('modifications', []))}")
+        print(f"  Goal achieved: {final_state.get('goal_achieved', False)}")
+        print(f"{'='*70}\n")
+        
+        return final_state
+    
+    def stream_run(
+        self,
+        project_path: str,
+        user_request: str = "Analyze the project and fix any code issues",
+        thread_id: Optional[str] = None
+    ):
+        """
+        流式运行代理
+        
         Yields:
-            State updates as they occur
+            状态更新
         """
         import uuid
         
         if thread_id is None:
             thread_id = str(uuid.uuid4())
         
-        initial_state = create_repo_workflow_state(project_path, self.max_fix_attempts)
+        initial_state = create_true_agent_state(
+            project_path=project_path,
+            user_request=user_request,
+            max_iterations=self.max_iterations
+        )
+        
         config = {"configurable": {"thread_id": thread_id}}
         
         for update in self.graph.stream(initial_state, config):
@@ -519,22 +705,45 @@ class MultiAgentRepoWorkflow:
 
 
 # ============================================================================
-# FACTORY FUNCTION
+# FACTORY FUNCTIONS
 # ============================================================================
 
 def create_multi_agent_workflow(
     llm_provider: str = "openrouter",
-    max_fix_attempts: int = 5
-) -> MultiAgentRepoWorkflow:
+    max_fix_attempts: int = 20
+) -> AutonomousRepoAgent:
     """
-    Factory function to create the multi-agent workflow.
+    创建多代理工作流的工厂函数
+    
+    注意：这现在创建的是自主代理，不是硬编码workflow！
     
     Args:
-        llm_provider: LLM provider to use
-        max_fix_attempts: Maximum fix attempts per file
+        llm_provider: LLM提供商
+        max_fix_attempts: 最大迭代次数
         
     Returns:
-        MultiAgentRepoWorkflow instance
+        AutonomousRepoAgent实例
     """
-    return MultiAgentRepoWorkflow(llm_provider, max_fix_attempts)
+    return AutonomousRepoAgent(llm_provider, max_fix_attempts)
 
+
+# 向后兼容的别名
+MultiAgentRepoWorkflow = AutonomousRepoAgent
+TrueAgent = AutonomousRepoAgent
+create_true_agent = create_multi_agent_workflow
+create_agent_executor = create_specialist_executor
+
+
+# ============================================================================
+# EXPORTED NAMES
+# ============================================================================
+
+__all__ = [
+    "AutonomousRepoAgent",
+    "MultiAgentRepoWorkflow",
+    "TrueAgent",
+    "create_multi_agent_workflow",
+    "create_true_agent",
+    "create_specialist_executor",
+    "create_agent_executor",
+]

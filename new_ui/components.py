@@ -95,10 +95,19 @@ class ChatMessage:
     """Agent chat message bubble"""
     
     AGENT_STYLES = {
+        # Core agents
+        "supervisor": (COLORS["primary"], "🧠", "Supervisor"),
+        "planner": (COLORS["info"], "📋", "Planner"),
+        "researcher": (COLORS["llm"], "🔎", "Researcher"),
         "scanner": (COLORS["scanner"], "🔍", "Scanner"),
         "analyzer": (COLORS["analyzer"], "🔬", "Analyzer"),
         "fixer": (COLORS["fixer"], "🔧", "Fixer"),
         "executor": (COLORS["executor"], "▶", "Executor"),
+        "tester": (COLORS["warning"], "🧪", "Tester"),
+        "reviewer": (COLORS["reporter"], "📊", "Reviewer"),
+        "environment": (COLORS["success"], "🌍", "Environment"),
+        "git": (COLORS["info"], "📦", "Git"),
+        # Legacy/utility
         "reporter": (COLORS["reporter"], "📊", "Reporter"),
         "llm": (COLORS["llm"], "🤖", "LLM"),
         "tool": (COLORS["tool"], "🛠", "Tool"),
@@ -284,37 +293,43 @@ class LogViewer:
 
 
 class WorkflowVisualizer:
-    """Visualize LangGraph workflow state"""
+    """Visualize autonomous agent workflow state"""
     
+    # All available agents in the autonomous system
     NODES = [
+        ("supervisor", "Supervisor", COLORS["primary"]),
+        ("planner", "Planner", COLORS["info"]),
+        ("researcher", "Researcher", COLORS["llm"]),
         ("scanner", "Scanner", COLORS["scanner"]),
         ("analyzer", "Analyzer", COLORS["analyzer"]),
         ("fixer", "Fixer", COLORS["fixer"]),
         ("executor", "Executor", COLORS["executor"]),
-        ("reporter", "Reporter", COLORS["reporter"]),
+        ("tester", "Tester", COLORS["warning"]),
+        ("reviewer", "Reviewer", COLORS["reporter"]),
+        ("environment", "Environ", COLORS["success"]),
     ]
     
-    def __init__(self):
+    def __init__(self, compact: bool = False):
         self.current_node = None
         self.completed_nodes = set()
         self.container = None
+        self.compact = compact
         self._build()
     
     def _build(self):
         with ui.element('div').classes('glass-card p-4 w-full') as self.container:
-            ui.label('Workflow Progress').classes('text-sm font-bold mb-4').style(f'color: {COLORS["text_dim"]}')
+            ui.label('Autonomous Agent System').classes('text-sm font-bold mb-4').style(f'color: {COLORS["text_dim"]}')
             
-            with ui.element('div').classes('flex items-center justify-between gap-2'):
-                for i, (node_id, name, color) in enumerate(self.NODES):
+            # Use grid layout for more agents
+            with ui.element('div').classes('grid grid-cols-5 gap-2'):
+                for node_id, name, color in self.NODES:
                     self._render_node(node_id, name, color)
-                    
-                    if i < len(self.NODES) - 1:
-                        ui.element('div').style(f'width: 40px; height: 2px; background: {COLORS["border"]}')
     
     def _render_node(self, node_id: str, name: str, color: str):
         """Render a single workflow node"""
         is_active = node_id == self.current_node
         is_completed = node_id in self.completed_nodes
+        is_supervisor = node_id == "supervisor"
         
         classes = 'workflow-node'
         if is_active:
@@ -324,15 +339,21 @@ class WorkflowVisualizer:
         
         border_color = color if is_active else (COLORS["success"] if is_completed else COLORS["border"])
         
-        with ui.element('div').classes(classes).style(f'border-color: {border_color}'):
+        # Supervisor gets special styling
+        extra_style = 'background: rgba(0,200,255,0.1);' if is_supervisor else ''
+        
+        with ui.element('div').classes(classes).style(f'border-color: {border_color}; {extra_style} padding: 8px; text-align: center;'):
             if is_completed:
-                ui.icon('check_circle').style(f'color: {COLORS["success"]}')
+                ui.icon('check_circle').style(f'color: {COLORS["success"]}; font-size: 20px;')
             elif is_active:
                 ui.spinner(size='sm').style(f'color: {color}')
             else:
-                ui.icon('radio_button_unchecked').style(f'color: {COLORS["text_dim"]}')
+                icon_name = 'psychology' if is_supervisor else 'radio_button_unchecked'
+                ui.icon(icon_name).style(f'color: {COLORS["text_dim"]}; font-size: 20px;')
             
-            ui.label(name).classes('text-xs font-medium mt-1').style(f'color: {color if is_active else COLORS["text_secondary"]}')
+            ui.label(name).classes('text-xs font-medium mt-1').style(
+                f'color: {color if is_active else COLORS["text_secondary"]}; display: block;'
+            )
     
     def set_active(self, node_id: str):
         """Set the active node"""
@@ -360,15 +381,12 @@ class WorkflowVisualizer:
             self.container.clear()
             self.container.classes('glass-card p-4 w-full')
             with self.container:
-                ui.label('Workflow Progress').classes('text-sm font-bold mb-4').style(f'color: {COLORS["text_dim"]}')
+                ui.label('Autonomous Agent System').classes('text-sm font-bold mb-4').style(f'color: {COLORS["text_dim"]}')
                 
-                with ui.element('div').classes('flex items-center justify-between gap-2'):
-                    for i, (node_id, name, color) in enumerate(self.NODES):
+                # Use grid layout for all agents
+                with ui.element('div').classes('grid grid-cols-5 gap-2'):
+                    for node_id, name, color in self.NODES:
                         self._render_node(node_id, name, color)
-                        
-                        if i < len(self.NODES) - 1:
-                            line_color = COLORS["success"] if node_id in self.completed_nodes else COLORS["border"]
-                            ui.element('div').style(f'width: 40px; height: 2px; background: {line_color}')
 
 
 class CodeDiffViewer:

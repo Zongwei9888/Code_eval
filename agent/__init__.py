@@ -9,10 +9,12 @@ from .state import (
     MultiAgentState,  # Alias for backward compatibility
     RepoWorkflowState,
     AgentLoopState,
+    TrueAgentState,  # New: for autonomous agent
     create_single_file_state,
     create_initial_state,  # Alias for backward compatibility
     create_repo_workflow_state,
-    create_agent_loop_state
+    create_agent_loop_state,
+    create_true_agent_state  # New: for autonomous agent
 )
 
 # Single-file agents
@@ -52,10 +54,12 @@ __all__ = [
     "MultiAgentState",
     "RepoWorkflowState",
     "AgentLoopState",
+    "TrueAgentState",
     "create_single_file_state",
     "create_initial_state",
     "create_repo_workflow_state",
     "create_agent_loop_state",
+    "create_true_agent_state",
     # Single-file agents
     "CodeAnalyzerAgent",
     "CodeExecutorAgent",

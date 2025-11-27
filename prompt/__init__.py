@@ -30,6 +30,18 @@ from .repo_prompts import (
     format_test_prompt
 )
 
+# Supervisor prompts (for True Agent)
+from .supervisor_prompts import (
+    SUPERVISOR_SYSTEM_PROMPT,
+    SCANNER_AGENT_PROMPT,
+    ANALYZER_AGENT_PROMPT,
+    FIXER_AGENT_PROMPT,
+    EXECUTOR_AGENT_PROMPT,
+    TESTER_AGENT_PROMPT,
+    format_state_summary,
+    format_agent_prompt
+)
+
 __all__ = [
     # Single-file prompts
     "ANALYZER_SYSTEM_PROMPT",
@@ -51,5 +63,14 @@ __all__ = [
     "format_analyze_prompt",
     "format_fix_prompt",
     "format_execute_prompt",
-    "format_test_prompt"
+    "format_test_prompt",
+    # Supervisor prompts (True Agent)
+    "SUPERVISOR_SYSTEM_PROMPT",
+    "SCANNER_AGENT_PROMPT",
+    "ANALYZER_AGENT_PROMPT",
+    "FIXER_AGENT_PROMPT",
+    "EXECUTOR_AGENT_PROMPT",
+    "TESTER_AGENT_PROMPT",
+    "format_state_summary",
+    "format_agent_prompt"
 ]

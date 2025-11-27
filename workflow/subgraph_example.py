@@ -1,6 +1,16 @@
 """
-Example of using subgraphs for complex multi-file code improvement
-Demonstrates LangGraph subgraph pattern from official documentation
+LEGACY EXAMPLE: Subgraph pattern for multi-file processing
+
+NOTE: This is a LEGACY example demonstrating the OLD workflow approach.
+The current system uses AutonomousRepoAgent which:
+- Uses Supervisor LLM for autonomous decision-making
+- Does not follow hardcoded workflows
+- Dynamically routes to specialist agents
+
+This file is kept for reference purposes only.
+For current implementation, see:
+- repo_workflow.py (AutonomousRepoAgent)
+- code_workflow.py (SingleFileAgent)
 """
 from typing import List, Dict, Any, TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END, add_messages

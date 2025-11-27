@@ -1,12 +1,23 @@
 #!/usr/bin/env python
 """
-CODE EVAL CLI v2.0
-Command-line interface for Multi-Agent Code Analysis System
+CODE EVAL CLI v3.0
+Command-line interface for Autonomous Multi-Agent Code Analysis System
 
 Features:
-1. Single File Analysis - Analyze and fix individual files
-2. Quick Scan - Fast local scan (no AI)
-3. Multi-Agent Analysis - Full workflow with feedback loops
+1. Quick Scan - Fast local scan (no AI)
+2. Single File Analysis - Autonomous single-file agent (Analyzer → Fixer → Executor)
+3. Multi-Agent Analysis - Full autonomous system with 10 specialist agents
+
+AUTONOMOUS AGENT SYSTEM:
+- Supervisor LLM observes state and decides each step dynamically
+- 10 Specialist Agents: planner, researcher, scanner, analyzer, fixer, 
+  executor, tester, reviewer, environment, git
+- Each agent has dedicated tools for their specific role
+- No hardcoded workflows - pure autonomous decision-making
+
+Key Innovation:
+- OLD: Hardcoded flow (Scanner -> Analyzer -> Fixer -> ...)
+- NEW: Supervisor decides dynamically based on LLM reasoning
 """
 import sys
 import os
@@ -141,18 +152,26 @@ def print_chat_message(role: str, content: str, turn: int = 0, has_tools: bool =
     """Print a chat message in a styled box"""
     width = min(get_terminal_width() - 6, 75)
     
-    # Role colors and styles
+    # Role colors and styles - Updated for 10 autonomous agents
     role_styles = {
         "llm": (Colors.BRIGHT_MAGENTA, "LLM"),
         "tool": (Colors.BRIGHT_BLUE, "TOOL"),
         "system": (Colors.BRIGHT_CYAN, "SYS"),
         "user": (Colors.BRIGHT_GREEN, "USER"),
         "error": (Colors.BRIGHT_RED, "ERR"),
+        # 10 Autonomous Agents
+        "supervisor": (Colors.BRIGHT_MAGENTA, "SUPERVISOR"),
+        "planner": (Colors.BRIGHT_BLUE, "PLANNER"),
+        "researcher": (Colors.MAGENTA, "RESEARCHER"),
         "scanner": (Colors.BRIGHT_CYAN, "SCANNER"),
         "analyzer": (Colors.BRIGHT_YELLOW, "ANALYZER"),
         "fixer": (Colors.BRIGHT_GREEN, "FIXER"),
         "executor": (Colors.BRIGHT_BLUE, "EXECUTOR"),
-        "reporter": (Colors.BRIGHT_MAGENTA, "REPORTER"),
+        "tester": (Colors.YELLOW, "TESTER"),
+        "reviewer": (Colors.BRIGHT_MAGENTA, "REVIEWER"),
+        "environment": (Colors.GREEN, "ENVIRONMENT"),
+        "git": (Colors.CYAN, "GIT"),
+        "reporter": (Colors.BRIGHT_MAGENTA, "REPORTER"),  # Legacy
     }
     
     color, label = role_styles.get(role.lower(), (Colors.WHITE, role.upper()))
@@ -218,11 +237,18 @@ def print_agent_header(agent_name: str, step: int):
     width = get_terminal_width()
     
     agent_colors = {
+        "supervisor": Colors.BRIGHT_MAGENTA,
+        "planner": Colors.BRIGHT_BLUE,
+        "researcher": Colors.MAGENTA,
         "scanner": Colors.BRIGHT_CYAN,
         "analyzer": Colors.BRIGHT_YELLOW,
         "fixer": Colors.BRIGHT_GREEN,
         "executor": Colors.BRIGHT_BLUE,
-        "reporter": Colors.BRIGHT_MAGENTA,
+        "tester": Colors.YELLOW,
+        "reviewer": Colors.BRIGHT_MAGENTA,
+        "environment": Colors.GREEN,
+        "git": Colors.CYAN,
+        "reporter": Colors.BRIGHT_MAGENTA,  # Legacy
     }
     
     color = agent_colors.get(agent_name.lower(), Colors.BRIGHT_CYAN)
@@ -433,7 +459,7 @@ def print_file_tree(path: Path, prefix: str = "", max_depth: int = 3, current_de
 # ============================================================================
 
 def run_single_file_analysis(project_name: str, file_path: str, provider: str = "openrouter", auto_fix: bool = True):
-    """Run analysis on a single file"""
+    """Run autonomous single-file analysis with Supervisor decision-making"""
     from workflow.code_workflow import create_workflow
     
     full_path = BENCH_DIR / project_name / file_path
@@ -442,11 +468,12 @@ def run_single_file_analysis(project_name: str, file_path: str, provider: str = 
         print_status("error", f"File not found: {file_path}")
         return
     
-    print_header("SINGLE FILE ANALYSIS", f"File: {file_path}")
+    print_header("AUTONOMOUS SINGLE-FILE AGENT", f"File: {file_path}")
     
     print_status("info", f"Provider: {provider}")
     print_status("info", f"Auto-fix: {auto_fix}")
     print_status("info", f"Max attempts: {5 if auto_fix else 1}")
+    print_status("ok", "Mode: Supervisor decides (Analyzer → Fixer → Executor)")
     
     try:
         # Create workflow
@@ -537,16 +564,18 @@ def run_single_file_analysis(project_name: str, file_path: str, provider: str = 
 # ============================================================================
 
 def run_multi_agent_analysis(project_name: str, provider: str = "openrouter", max_attempts: int = 5):
-    """Run full multi-agent analysis with feedback loops"""
-    from agent.multi_agent_system import create_multi_agent_workflow
+    """Run autonomous multi-agent analysis with 10 specialist agents"""
+    from workflow import create_multi_agent_workflow
     
     project_path = BENCH_DIR / project_name
     
-    print_header("MULTI-AGENT ANALYSIS", f"Project: {project_name}")
+    print_header("AUTONOMOUS MULTI-AGENT SYSTEM", f"Project: {project_name}")
     
     print_status("info", f"Provider: {provider}")
-    print_status("info", f"Max fix attempts: {max_attempts}")
-    print_status("info", "Flow: Scanner -> Analyzer -> [Fixer <-> Executor] -> Reporter")
+    print_status("info", f"Max iterations: {max_attempts}")
+    print_status("ok", "Mode: AUTONOMOUS (Supervisor LLM decides each step)")
+    print_status("info", "10 Agents: planner, researcher, scanner, analyzer, fixer,")
+    print_status("info", "           executor, tester, reviewer, environment, git")
     
     try:
         # Create workflow
@@ -665,6 +694,178 @@ def run_multi_agent_analysis(project_name: str, provider: str = "openrouter", ma
 
 
 # ============================================================================
+# TRUE AGENT ANALYSIS (Autonomous Decision-Making)
+# ============================================================================
+
+def run_true_agent_analysis(project_name: str, provider: str = "openrouter", max_iterations: int = 20):
+    """
+    Run Autonomous Agent System with 10 specialists
+    
+    The Autonomous Agent uses a Supervisor LLM to:
+    - Observe current state comprehensively
+    - Reason about what to do next using LLM intelligence
+    - Dynamically select from 10 specialist agents
+    - Adapt strategy based on feedback loops
+    - Each agent has dedicated tools for their role
+    
+    This is the SAME as run_multi_agent_analysis (unified autonomous system)
+    """
+    from workflow import create_true_agent
+    
+    project_path = BENCH_DIR / project_name
+    
+    print_header("AUTONOMOUS AGENT SYSTEM", f"Project: {project_name}")
+    
+    print_status("info", f"Provider: {provider}")
+    print_status("info", f"Max iterations: {max_iterations}")
+    print_status("ok", "Mode: AUTONOMOUS (Supervisor decides dynamically)")
+    
+    print()
+    print(f"  {Colors.BRIGHT_MAGENTA}Autonomous Decision-Making:{Colors.RESET}")
+    print(f"  {Colors.DIM}  - 10 Specialist Agents with dedicated tools{Colors.RESET}")
+    print(f"  {Colors.DIM}  - Supervisor LLM observes state and decides each step{Colors.RESET}")
+    print(f"  {Colors.DIM}  - No hardcoded workflows - pure autonomous reasoning{Colors.RESET}")
+    print()
+    
+    try:
+        # Create True Agent
+        print_status("run", "Creating True Agent...")
+        agent = create_true_agent(
+            llm_provider=provider,
+            max_iterations=max_iterations
+        )
+        
+        print_status("ok", f"Specialists: {', '.join(agent.specialists.keys())}")
+        
+        # Get user request
+        print()
+        default_request = "Analyze the project and fix any code issues"
+        user_request = input(
+            f"{Colors.BRIGHT_YELLOW}Enter request [{default_request}]: {Colors.RESET}"
+        ).strip() or default_request
+        
+        # Run agent
+        print_section("Agent Execution")
+        
+        thread_id = str(uuid.uuid4())
+        print_status("info", f"Thread: {thread_id[:8]}...")
+        print_status("info", f"Request: {user_request}")
+        print()
+        
+        step_count = 0
+        all_decisions = []
+        final_state = None
+        current_agent = None
+        
+        for update in agent.stream_run(str(project_path), user_request, thread_id):
+            step_count += 1
+            if update:
+                node = list(update.keys())[0]
+                node_data = update.get(node, {})
+                
+                # Print agent header when agent changes
+                if node != current_agent:
+                    if node == "supervisor":
+                        print(f"\n{Colors.BRIGHT_MAGENTA}{'='*60}{Colors.RESET}")
+                        print(f"{Colors.BRIGHT_MAGENTA}  SUPERVISOR - Making Decision{Colors.RESET}")
+                        print(f"{Colors.BRIGHT_MAGENTA}{'='*60}{Colors.RESET}")
+                    else:
+                        print_agent_header(node, step_count)
+                    current_agent = node
+                
+                if isinstance(node_data, dict):
+                    # Show supervisor decision
+                    if node == "supervisor":
+                        decision = node_data.get("supervisor_decision", "")
+                        reasoning = node_data.get("supervisor_reasoning", "")
+                        iteration = node_data.get("iteration_count", 0)
+                        
+                        if decision:
+                            print()
+                            print(f"  {Colors.BOLD}Iteration:{Colors.RESET} {iteration}")
+                            print(f"  {Colors.BOLD}Decision:{Colors.RESET} {Colors.BRIGHT_CYAN}{decision}{Colors.RESET}")
+                            if reasoning:
+                                # Truncate reasoning for display
+                                reasoning_short = reasoning[:200] + "..." if len(reasoning) > 200 else reasoning
+                                print(f"  {Colors.BOLD}Reasoning:{Colors.RESET} {Colors.DIM}{reasoning_short}{Colors.RESET}")
+                            
+                            all_decisions.append({
+                                "iteration": iteration,
+                                "decision": decision,
+                                "reasoning": reasoning[:100]
+                            })
+                    
+                    # Show step logs
+                    step_logs = node_data.get("step_logs", [])
+                    if step_logs:
+                        latest_log = step_logs[-1]
+                        agent_name = latest_log.get("agent", "")
+                        action = latest_log.get("action", "")
+                        if action and agent_name != "supervisor":
+                            print_status("info", f"[{agent_name}] {action}")
+                    
+                    # Show key state changes
+                    if node_data.get("syntax_errors"):
+                        errors = node_data["syntax_errors"]
+                        print_status("warn", f"Syntax errors found: {len(errors)}")
+                    
+                    if node_data.get("last_execution_success") is not None:
+                        success = node_data["last_execution_success"]
+                        if success:
+                            print_status("ok", "Execution succeeded!")
+                        else:
+                            error_msg = node_data.get("last_error_message", "")[:100]
+                            print_status("error", f"Execution failed: {error_msg}")
+                    
+                    if node_data.get("goal_achieved"):
+                        print_status("ok", "Goal achieved!")
+                
+                final_state = node_data
+            
+            if step_count > 50:
+                print_status("warn", "Reached step limit")
+                break
+        
+        # Final summary
+        print_section("Summary")
+        
+        if final_state:
+            iterations = final_state.get("iteration_count", 0)
+            modifications = len(final_state.get("modifications", []))
+            goal_achieved = final_state.get("goal_achieved", False)
+            
+            summary_content = [
+                f"Total Steps: {step_count}",
+                f"Iterations: {iterations}",
+                f"Decisions Made: {len(all_decisions)}",
+                f"Modifications: {modifications}",
+                f"Goal Achieved: {'YES' if goal_achieved else 'NO'}"
+            ]
+            
+            # Show decision history
+            if all_decisions:
+                summary_content.append("")
+                summary_content.append("Decision History:")
+                for d in all_decisions[-5:]:
+                    summary_content.append(f"  {d['iteration']}: {d['decision']}")
+            
+            color = Colors.BRIGHT_GREEN if goal_achieved else Colors.BRIGHT_YELLOW
+            print_box("TRUE AGENT RESULTS", summary_content, color)
+            
+            if goal_achieved:
+                print_status("ok", "True Agent completed successfully!")
+            else:
+                print_status("warn", f"Agent stopped after {iterations} iterations")
+        else:
+            print_status("warn", "No final state available")
+        
+    except Exception as e:
+        print_status("error", f"True Agent failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+# ============================================================================
 # INTERACTIVE MENU
 # ============================================================================
 
@@ -681,15 +882,16 @@ def show_main_menu():
   ╚██████╗╚██████╔╝██████╔╝███████╗    ███████╗ ╚████╔╝ ██║  ██║███████╗
    ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝    ╚══════╝  ╚═══╝  ╚═╝  ╚═╝╚══════╝
 {Colors.RESET}
-{Colors.DIM}   Multi-Agent Code Analysis System | CLI v2.0{Colors.RESET}
+{Colors.DIM}   Autonomous Multi-Agent Code Analysis System | CLI v3.0{Colors.RESET}
 """)
     
     print(f"{Colors.BOLD}  Main Menu{Colors.RESET}\n")
     print(f"  {Colors.BRIGHT_CYAN}1{Colors.RESET}. Quick Scan        {Colors.DIM}- Fast local scan (no AI){Colors.RESET}")
-    print(f"  {Colors.BRIGHT_CYAN}2{Colors.RESET}. Single File Fix   {Colors.DIM}- Analyze & fix one file{Colors.RESET}")
-    print(f"  {Colors.BRIGHT_CYAN}3{Colors.RESET}. Multi-Agent       {Colors.DIM}- Full project analysis{Colors.RESET}")
-    print(f"  {Colors.BRIGHT_CYAN}4{Colors.RESET}. List Projects     {Colors.DIM}- Show available projects{Colors.RESET}")
-    print(f"  {Colors.BRIGHT_CYAN}5{Colors.RESET}. Settings          {Colors.DIM}- Configure LLM provider{Colors.RESET}")
+    print(f"  {Colors.BRIGHT_CYAN}2{Colors.RESET}. Single File Fix   {Colors.DIM}- Autonomous single-file agent{Colors.RESET}")
+    print(f"  {Colors.BRIGHT_MAGENTA}3{Colors.RESET}. {Colors.BRIGHT_MAGENTA}Multi-Agent{Colors.RESET}        {Colors.DIM}- 10 specialists + Supervisor{Colors.RESET}")
+    print(f"  {Colors.BRIGHT_MAGENTA}4{Colors.RESET}. {Colors.BRIGHT_MAGENTA}Autonomous Agent{Colors.RESET}   {Colors.DIM}- Same as #3 (unified system){Colors.RESET}")
+    print(f"  {Colors.BRIGHT_CYAN}5{Colors.RESET}. List Projects     {Colors.DIM}- Show available projects{Colors.RESET}")
+    print(f"  {Colors.BRIGHT_CYAN}6{Colors.RESET}. Settings          {Colors.DIM}- Configure LLM provider{Colors.RESET}")
     print()
     print(f"  {Colors.DIM}q. Quit{Colors.RESET}")
     print()
@@ -737,7 +939,7 @@ def interactive_mode():
         show_main_menu()
         
         try:
-            choice = input(f"{Colors.BRIGHT_YELLOW}Select option [1-5]: {Colors.RESET}").strip().lower()
+            choice = input(f"{Colors.BRIGHT_YELLOW}Select option [1-6]: {Colors.RESET}").strip().lower()
             
             if choice == 'q' or choice == 'quit':
                 print(f"\n{Colors.DIM}Goodbye!{Colors.RESET}\n")
@@ -761,13 +963,20 @@ def interactive_mode():
                         input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
             
             elif choice == '3':
-                # Multi-Agent Analysis
+                # Workflow Mode (Multi-Agent with fixed flow)
                 project = select_project()
                 if project:
                     run_multi_agent_analysis(project, current_provider)
                     input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
             
             elif choice == '4':
+                # True Agent (Autonomous mode)
+                project = select_project()
+                if project:
+                    run_true_agent_analysis(project, current_provider)
+                    input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+            
+            elif choice == '5':
                 # List Projects
                 projects = get_projects()
                 print_section("Available Projects")
@@ -780,7 +989,7 @@ def interactive_mode():
                     print_status("warn", "No projects found")
                 input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
             
-            elif choice == '5':
+            elif choice == '6':
                 # Settings
                 current_provider = settings_menu(current_provider)
                 input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
@@ -800,19 +1009,29 @@ def interactive_mode():
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description="CODE EVAL - Multi-Agent Code Analysis System",
+        description="CODE EVAL - Autonomous Multi-Agent Code Analysis System v3.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python cli_v2.py                      Interactive mode
-  python cli_v2.py scan myproject       Quick scan a project
-  python cli_v2.py analyze myproject    Multi-agent analysis
-  python cli_v2.py fix myproject file.py Fix a single file
+  python cli.py                         Interactive mode
+  python cli.py scan myproject          Quick scan a project
+  python cli.py workflow myproject      Multi-agent autonomous analysis
+  python cli.py agent myproject         Same as workflow (unified system)
+  python cli.py fix myproject file.py   Fix a single file
+
+Autonomous Agent System:
+  - 10 Specialist Agents: planner, researcher, scanner, analyzer, fixer,
+    executor, tester, reviewer, environment, git
+  - Supervisor LLM observes state and decides each step dynamically
+  - Each agent has dedicated tools for their specific role
+  - No hardcoded workflows - pure autonomous decision-making
+
+Both 'workflow' and 'agent' commands now use the same autonomous system.
         """
     )
     
     parser.add_argument('command', nargs='?', default='interactive',
-                       choices=['interactive', 'scan', 'analyze', 'fix', 'list'],
+                       choices=['interactive', 'scan', 'workflow', 'agent', 'fix', 'list'],
                        help='Command to run')
     parser.add_argument('project', nargs='?', help='Project name')
     parser.add_argument('file', nargs='?', help='File path (for fix command)')
@@ -821,7 +1040,11 @@ Examples:
     parser.add_argument('--no-fix', action='store_true',
                        help='Disable auto-fix for single file mode')
     parser.add_argument('--max-attempts', type=int, default=5,
-                       help='Max fix attempts (default: 5)')
+                       help='Max fix attempts for workflow (default: 5)')
+    parser.add_argument('--max-iterations', type=int, default=20,
+                       help='Max iterations for True Agent (default: 20)')
+    parser.add_argument('-r', '--request', type=str, default="Analyze the project and fix any code issues",
+                       help='User request for True Agent')
     
     args = parser.parse_args()
     
@@ -844,25 +1067,36 @@ Examples:
     
     elif args.command == 'scan':
         if not args.project:
-            print_status("error", "Project name required. Usage: cli_v2.py scan <project>")
+            print_status("error", "Project name required. Usage: cli.py scan <project>")
             return 1
         if args.project not in get_projects():
             print_status("error", f"Project not found: {args.project}")
             return 1
         run_quick_scan(args.project)
     
-    elif args.command == 'analyze':
+    elif args.command == 'workflow':
+        # Workflow mode (fixed flow)
         if not args.project:
-            print_status("error", "Project name required. Usage: cli_v2.py analyze <project>")
+            print_status("error", "Project name required. Usage: cli.py workflow <project>")
             return 1
         if args.project not in get_projects():
             print_status("error", f"Project not found: {args.project}")
             return 1
         run_multi_agent_analysis(args.project, args.provider, args.max_attempts)
     
+    elif args.command == 'agent':
+        # True Agent mode (autonomous)
+        if not args.project:
+            print_status("error", "Project name required. Usage: cli.py agent <project>")
+            return 1
+        if args.project not in get_projects():
+            print_status("error", f"Project not found: {args.project}")
+            return 1
+        run_true_agent_analysis(args.project, args.provider, args.max_iterations)
+    
     elif args.command == 'fix':
         if not args.project or not args.file:
-            print_status("error", "Project and file required. Usage: cli_v2.py fix <project> <file>")
+            print_status("error", "Project and file required. Usage: cli.py fix <project> <file>")
             return 1
         if args.project not in get_projects():
             print_status("error", f"Project not found: {args.project}")

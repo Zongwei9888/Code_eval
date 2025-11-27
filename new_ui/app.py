@@ -354,8 +354,8 @@ def create_multi_agent_panel():
         # Left column
         with ui.element('div').classes('w-80'):
             with ui.element('div').classes('glass-card p-4 mb-4'):
-                ui.label('Multi-Agent Workflow').classes('text-lg font-bold mb-2').style(f'color: {COLORS["reporter"]}')
-                ui.label('Full repo analysis with feedback loops').classes('text-sm mb-4').style(f'color: {COLORS["text_dim"]}')
+                ui.label('Autonomous Agent System').classes('text-lg font-bold mb-2').style(f'color: {COLORS["primary"]}')
+                ui.label('Supervisor-driven autonomous analysis').classes('text-sm mb-4').style(f'color: {COLORS["text_dim"]}')
                 
                 # Project select
                 ui.label('Project').classes('text-sm mb-1').style(f'color: {COLORS["text_dim"]}')

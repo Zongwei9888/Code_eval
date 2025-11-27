@@ -24,12 +24,19 @@ COLORS = {
     "error": "#ff3366",         # Hot pink
     "info": "#3b82f6",          # Blue
     
-    # Agent-specific colors
+    # Agent-specific colors (10 autonomous agents)
+    "supervisor": "#00d4ff",    # Cyan - the brain
+    "planner": "#3b82f6",       # Blue
+    "researcher": "#7c3aed",    # Violet
     "scanner": "#00d4ff",       # Cyan
     "analyzer": "#ffaa00",      # Amber
     "fixer": "#00ff88",         # Green
     "executor": "#3b82f6",      # Blue
-    "reporter": "#d946ef",      # Fuchsia
+    "tester": "#f59e0b",        # Amber/Orange
+    "reviewer": "#d946ef",      # Fuchsia
+    "environment": "#10b981",   # Emerald
+    "git": "#6366f1",           # Indigo
+    "reporter": "#d946ef",      # Fuchsia (legacy)
     
     # Special
     "llm": "#7c3aed",           # Violet for LLM responses
