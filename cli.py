@@ -5,15 +5,14 @@ Command-line interface for Autonomous Multi-Agent Code Analysis System
 
 Features:
 1. Quick Scan - Fast local scan (no AI)
-2. Single File Analysis - Autonomous single-file agent (Analyzer → Fixer → Executor)
-3. Multi-Agent Analysis - Full autonomous system with 10 specialist agents
+2. Single File Analysis - Autonomous single-file agent (Analyzer -> Fixer -> Executor)
+3. Multi-Agent Analysis - Full autonomous system with 4 core agents
 
 AUTONOMOUS AGENT SYSTEM:
 - Supervisor LLM observes state and decides each step dynamically
-- 10 Specialist Agents: planner, researcher, scanner, analyzer, fixer, 
-  executor, tester, reviewer, environment, git
+- 4 Core Agents: scanner, analyzer, fixer, executor
 - Each agent has dedicated tools for their specific role
-- No hardcoded workflows - pure autonomous decision-making
+- Dynamic routing based on error analysis
 
 Key Innovation:
 - OLD: Hardcoded flow (Scanner -> Analyzer -> Fixer -> ...)
@@ -574,8 +573,7 @@ def run_multi_agent_analysis(project_name: str, provider: str = "openrouter", ma
     print_status("info", f"Provider: {provider}")
     print_status("info", f"Max iterations: {max_attempts}")
     print_status("ok", "Mode: AUTONOMOUS (Supervisor LLM decides each step)")
-    print_status("info", "10 Agents: planner, researcher, scanner, analyzer, fixer,")
-    print_status("info", "           executor, tester, reviewer, environment, git")
+    print_status("info", "4 Core Agents: scanner, analyzer, fixer, executor")
     
     try:
         # Create workflow
@@ -722,9 +720,9 @@ def run_true_agent_analysis(project_name: str, provider: str = "openrouter", max
     
     print()
     print(f"  {Colors.BRIGHT_MAGENTA}Autonomous Decision-Making:{Colors.RESET}")
-    print(f"  {Colors.DIM}  - 10 Specialist Agents with dedicated tools{Colors.RESET}")
+    print(f"  {Colors.DIM}  - 4 Core Agents: scanner, analyzer, fixer, executor{Colors.RESET}")
     print(f"  {Colors.DIM}  - Supervisor LLM observes state and decides each step{Colors.RESET}")
-    print(f"  {Colors.DIM}  - No hardcoded workflows - pure autonomous reasoning{Colors.RESET}")
+    print(f"  {Colors.DIM}  - Dynamic routing based on error analysis{Colors.RESET}")
     print()
     
     try:
@@ -888,7 +886,7 @@ def show_main_menu():
     print(f"{Colors.BOLD}  Main Menu{Colors.RESET}\n")
     print(f"  {Colors.BRIGHT_CYAN}1{Colors.RESET}. Quick Scan        {Colors.DIM}- Fast local scan (no AI){Colors.RESET}")
     print(f"  {Colors.BRIGHT_CYAN}2{Colors.RESET}. Single File Fix   {Colors.DIM}- Autonomous single-file agent{Colors.RESET}")
-    print(f"  {Colors.BRIGHT_MAGENTA}3{Colors.RESET}. {Colors.BRIGHT_MAGENTA}Multi-Agent{Colors.RESET}        {Colors.DIM}- 10 specialists + Supervisor{Colors.RESET}")
+    print(f"  {Colors.BRIGHT_MAGENTA}3{Colors.RESET}. {Colors.BRIGHT_MAGENTA}Multi-Agent{Colors.RESET}        {Colors.DIM}- 4 core agents + Supervisor{Colors.RESET}")
     print(f"  {Colors.BRIGHT_MAGENTA}4{Colors.RESET}. {Colors.BRIGHT_MAGENTA}Autonomous Agent{Colors.RESET}   {Colors.DIM}- Same as #3 (unified system){Colors.RESET}")
     print(f"  {Colors.BRIGHT_CYAN}5{Colors.RESET}. List Projects     {Colors.DIM}- Show available projects{Colors.RESET}")
     print(f"  {Colors.BRIGHT_CYAN}6{Colors.RESET}. Settings          {Colors.DIM}- Configure LLM provider{Colors.RESET}")
@@ -1020,11 +1018,10 @@ Examples:
   python cli.py fix myproject file.py   Fix a single file
 
 Autonomous Agent System:
-  - 10 Specialist Agents: planner, researcher, scanner, analyzer, fixer,
-    executor, tester, reviewer, environment, git
+  - 4 Core Agents: scanner, analyzer, fixer, executor
   - Supervisor LLM observes state and decides each step dynamically
   - Each agent has dedicated tools for their specific role
-  - No hardcoded workflows - pure autonomous decision-making
+  - Dynamic routing based on error analysis
 
 Both 'workflow' and 'agent' commands now use the same autonomous system.
         """

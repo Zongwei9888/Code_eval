@@ -43,6 +43,9 @@ from .project_analyzer import (
     scan_code_bench
 )
 
+# Logger utility
+from .logger import get_logger, AgentLogger
+
 # MCP integration (optional)
 try:
     from .mcp_integration import (
@@ -87,6 +90,9 @@ __all__ = [
     "ProjectInfo",
     "FileInfo",
     "scan_code_bench",
+    # Logger
+    "get_logger",
+    "AgentLogger",
     # MCP
     "MCP_INTEGRATION_AVAILABLE"
 ]

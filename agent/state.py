@@ -17,7 +17,7 @@ class SingleFileState(TypedDict):
     State for single-file code improvement workflow.
     Uses TypedDict for proper LangGraph integration.
     
-    Updated to support autonomous agent decision-making.
+    Updated to support autonomous agent decision-making and dynamic interaction.
     """
     # Message history with proper annotation
     messages: Annotated[List[AnyMessage], add_messages]
@@ -49,6 +49,15 @@ class SingleFileState(TypedDict):
     # Supervisor decision (for autonomous agent mode)
     supervisor_decision: str
     current_task: str
+    
+    # ==========================================================================
+    # Agent Communication & Dynamic Interaction (NEW!)
+    # ==========================================================================
+    last_agent: Optional[str]  # Which agent just executed
+    last_agent_output: Dict[str, Any]  # Structured output from last agent
+    agent_feedback: str  # Human-readable feedback from last agent
+    context_for_next_agent: Dict[str, Any]  # Context to pass forward
+    decision_history: List[Dict[str, Any]]  # History of supervisor decisions
 
 
 # Alias for backward compatibility
@@ -147,7 +156,13 @@ def create_single_file_state(
         "final_status": "",
         # Supervisor decision fields (for autonomous mode)
         "supervisor_decision": "",
-        "current_task": ""
+        "current_task": "",
+        # Agent communication (NEW!)
+        "last_agent": None,
+        "last_agent_output": {},
+        "agent_feedback": "",
+        "context_for_next_agent": {},
+        "decision_history": []
     }
 
 
@@ -259,6 +274,12 @@ class TrueAgentState(TypedDict):
     last_error_message: str
     
     # ==========================================================================
+    # Intelligent Error Analysis (Smart Decision Support)
+    # ==========================================================================
+    error_analysis: Dict[str, Any]  # Current error analysis with type and suggestion
+    suggested_next_agent: Optional[str]  # AI-suggested next agent based on error
+    
+    # ==========================================================================
     # Modification History (Audit Trail)
     # ==========================================================================
     modifications: List[Dict[str, Any]]  # All code changes made
@@ -269,6 +290,14 @@ class TrueAgentState(TypedDict):
     supervisor_decision: str  # Current decision (which agent to call)
     supervisor_reasoning: str  # Why this decision was made
     decision_history: List[Dict[str, Any]]  # All decisions made
+    
+    # ==========================================================================
+    # Agent Communication & Dynamic Interaction (NEW!)
+    # ==========================================================================
+    last_agent: Optional[str]  # Which agent just executed
+    last_agent_output: Dict[str, Any]  # Structured output from last agent
+    agent_feedback: str  # Human-readable feedback from last agent
+    context_for_next_agent: Dict[str, Any]  # Specific context to pass forward
     
     # ==========================================================================
     # Loop Control
@@ -329,6 +358,10 @@ def create_true_agent_state(
         "last_execution_success": False,
         "last_error_message": "",
         
+        # Intelligent error analysis
+        "error_analysis": {},
+        "suggested_next_agent": None,
+        
         # Modifications
         "modifications": [],
         
@@ -336,6 +369,12 @@ def create_true_agent_state(
         "supervisor_decision": "",
         "supervisor_reasoning": "",
         "decision_history": [],
+        
+        # Agent communication (NEW!)
+        "last_agent": None,
+        "last_agent_output": {},
+        "agent_feedback": "",
+        "context_for_next_agent": {},
         
         # Loop control
         "iteration_count": 0,

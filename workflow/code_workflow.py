@@ -61,56 +61,68 @@ from tools.agent_tools import (
 
 SINGLE_FILE_SUPERVISOR_PROMPT = """You are the Supervisor for a single-file code improvement agent.
 
-Your role is to OBSERVE the current state and DECIDE what to do next.
-You delegate to specialist agents - you do NOT execute tasks yourself.
+Your role: OBSERVE agent feedback → DECIDE next action → DELEGATE to agent.
 
-## Available Agents
+## Available Agents (3 Core)
 
-1. **analyzer** - Analyze code for syntax errors and issues
-   - Use when: Need to check code quality, find errors
+1. **analyzer** - Analyze code for errors and issues
    - Tools: check_python_syntax, read_file_with_lines
 
-2. **fixer** - Fix code issues with precise edits
-   - Use when: Errors found that need fixing
+2. **fixer** - Fix code with precise edits (str_replace)
    - Tools: str_replace, insert_at_line, delete_lines
-   - IMPORTANT: Uses precise editing, NOT file overwrite!
 
-3. **executor** - Run code to verify it works
-   - Use when: Need to test if code executes correctly
+3. **executor** - Execute code to verify functionality
    - Tools: execute_python_file
 
-## Decision Rules
+## Decision Flow (Dynamic!)
 
-1. Start with **analyzer** to understand code issues
-2. Use **fixer** when errors are identified
-3. Use **executor** after fixing to verify
-4. Loop back if execution fails (fixer -> executor -> ...)
-5. **FINISH** when:
-   - Code executes successfully
-   - Maximum attempts reached
-   - No more fixable issues
+Standard: analyzer → fixer (if errors) → executor → FINISH
+          ↑                                   ↓
+          └─────── (if failed) ───────────────┘
 
-## Your Output Format
+## Key Rules
 
-Respond with valid JSON:
+1. **READ agent feedback first!** - Last agent tells you what to do next
+2. **No hard-coded sequence** - Decide based on agent output
+3. **Trust agent recommendations** - They know their domain
+4. **NEVER loop same agent 3+ times** - Try different approach
+5. **FINISH when**:
+   - Executor succeeded
+   - Max attempts reached
+   - Same error repeats 3+ times
+
+## Output Format
+
 ```json
 {
-    "reasoning": "Your analysis of current state",
-    "decision": "analyzer OR fixer OR executor OR FINISH",
-    "task_for_agent": "Specific instructions",
-    "confidence": "high/medium/low"
+    "reasoning": "Based on [last_agent] feedback: [summary]",
+    "decision": "analyzer|fixer|executor|FINISH",
+    "task_for_agent": "Specific task instructions"
 }
 ```
 
-## Important
-- Be decisive
-- Don't loop indefinitely
-- If same error repeats 3+ times, try different approach or FINISH
-- Prefer precise edits (str_replace) over rewrites
+## Decision Examples
+
+**Agent: analyzer, Feedback: "Found 2 syntax errors"**
+→ Decision: "fixer" (fix the errors)
+
+**Agent: fixer, Feedback: "Fix applied, recommend executor"**
+→ Decision: "executor" (verify the fix)
+
+**Agent: executor, Feedback: "Failed with NameError"**
+→ Decision: "fixer" (add missing definition)
+
+**Agent: executor, Feedback: "Execution successful"**
+→ Decision: "FINISH" (goal achieved)
+
+**CRITICAL**: Always base decision on agent feedback, not hard rules!
 """
 
 
 STATE_SUMMARY_TEMPLATE = """## Current State
+
+### Last Agent Communication (READ THIS FIRST!)
+{agent_communication}
 
 ### Target File
 - Path: {target_file}
@@ -131,12 +143,9 @@ STATE_SUMMARY_TEMPLATE = """## Current State
 ### Modification History
 {modification_count} modifications made
 
-### Recent Activity
-{recent_activity}
-
 ---
 
-What should be the next action?
+Based on the agent feedback above, what should be the next action?
 """
 
 
@@ -325,12 +334,51 @@ Target file: {state['target_file']}
         return workflow.compile(checkpointer=self.checkpointer)
     
     def _supervisor_node(self, state: SingleFileState) -> Dict[str, Any]:
-        """Supervisor决策节点"""
+        """
+        Supervisor决策节点 - 动态交互版本
+        
+        观察 agent 反馈并做出智能决策
+        """
         attempts = state.get("execution_attempts", 0)
+        last_agent = state.get("last_agent")
+        agent_feedback = state.get("agent_feedback", "")
         
         print(f"\n{'='*60}")
         print(f"  SUPERVISOR - Attempt {attempts + 1}/{self.max_attempts}")
+        if last_agent:
+            print(f"  Last agent: {last_agent.upper()}")
+            print(f"  Feedback: {agent_feedback[:100]}...")
         print(f"{'='*60}")
+        
+        # 检查循环（同一个 agent 连续 3 次）
+        decision_history = state.get("decision_history", [])
+        if len(decision_history) >= 3:
+            last_3 = [d["decision"] for d in decision_history[-3:]]
+            if len(set(last_3)) == 1:
+                agent = last_3[0]
+                print(f"  [!] LOOP DETECTED: {agent} called 3 times!")
+                
+                # 打破循环
+                if agent == "analyzer":
+                    print(f"  [!] Breaking loop: analyzer -> executor")
+                    return {
+                        "supervisor_decision": "executor",
+                        "current_task": "Execute the code despite analysis loop",
+                        "final_status": ""
+                    }
+                elif agent == "fixer":
+                    print(f"  [!] Breaking loop: fixer -> executor (test the fix)")
+                    return {
+                        "supervisor_decision": "executor",
+                        "current_task": "Verify if repeated fixes resolved the issue",
+                        "final_status": ""
+                    }
+                elif agent == "executor":
+                    print(f"  [!] Breaking loop: executor -> FINISH (stuck)")
+                    return {
+                        "supervisor_decision": "FINISH",
+                        "final_status": f"INCOMPLETE: Stuck in executor loop after {attempts} attempts"
+                    }
         
         # 检查是否完成
         if state.get("execution_success", False):
@@ -347,7 +395,7 @@ Target file: {state['target_file']}
                 "final_status": f"INCOMPLETE: Max attempts ({self.max_attempts}) reached"
             }
         
-        # 格式化状态摘要
+        # 格式化状态摘要（包含 agent 反馈）
         state_summary = self._format_state_summary(state)
         
         # 询问Supervisor
@@ -363,15 +411,50 @@ Target file: {state['target_file']}
         decision = self._parse_decision(content)
         
         print(f"  [Decision] -> {decision['decision']}")
+        print(f"  [Reasoning] {decision.get('reasoning', 'N/A')[:100]}...")
+        
+        # 记录决策
+        decision_history = list(decision_history)
+        decision_history.append({
+            "iteration": len(decision_history) + 1,
+            "decision": decision["decision"],
+            "reasoning": decision.get("reasoning", ""),
+            "timestamp": datetime.now().isoformat()
+        })
         
         return {
             "supervisor_decision": decision["decision"],
             "current_task": decision.get("task_for_agent", ""),
+            "decision_history": decision_history,
             "messages": [response]
         }
     
     def _format_state_summary(self, state: SingleFileState) -> str:
-        """格式化状态摘要"""
+        """
+        格式化状态摘要 - 包含 agent 通信
+        """
+        # Agent communication
+        last_agent = state.get("last_agent")
+        agent_feedback = state.get("agent_feedback", "")
+        last_agent_output = state.get("last_agent_output", {})
+        context_for_next = state.get("context_for_next_agent", {})
+        
+        if last_agent:
+            agent_communication = f"""
+**Last Agent**: {last_agent.upper()}
+**Feedback**: {agent_feedback}
+
+**Structured Output**:
+{json.dumps(last_agent_output, indent=2)}
+"""
+            if context_for_next:
+                agent_communication += f"""
+**Context for Next Agent**:
+{json.dumps(context_for_next, indent=2)}
+"""
+        else:
+            agent_communication = "**No previous agent** - Starting fresh. Recommend analyzer first."
+        
         # 读取文件行数
         try:
             content = Path(state["target_file"]).read_text(encoding='utf-8')
@@ -379,13 +462,8 @@ Target file: {state['target_file']}
         except:
             total_lines = 0
         
-        recent = state.get("modification_history", [])[-3:]
-        recent_activity = "\n".join(
-            f"  - Modification {i+1}"
-            for i, _ in enumerate(recent)
-        ) if recent else "  (No activity)"
-        
         return STATE_SUMMARY_TEMPLATE.format(
+            agent_communication=agent_communication,
             target_file=state.get("target_file", "Unknown"),
             total_lines=total_lines,
             analysis_complete=state.get("analysis_complete", False),
@@ -395,8 +473,7 @@ Target file: {state['target_file']}
             last_result=state.get("last_execution_result", "None")[:200],
             execution_success=state.get("execution_success", False),
             last_error=state.get("last_error", "None")[:300],
-            modification_count=len(state.get("modification_history", [])),
-            recent_activity=recent_activity
+            modification_count=len(state.get("modification_history", []))
         )
     
     def _parse_decision(self, content: str) -> Dict[str, Any]:
@@ -424,8 +501,18 @@ Target file: {state['target_file']}
         return decision
     
     def _analyzer_node(self, state: SingleFileState) -> Dict[str, Any]:
-        """Analyzer节点"""
+        """
+        Analyzer节点 - 动态交互版本
+        
+        分析代码并生成反馈给 Supervisor
+        """
         task = state.get("current_task", "Analyze the code for errors")
+        context = state.get("context_for_next_agent", {})
+        
+        print(f"\n  [ANALYZER] Task: {task[:100]}...")
+        if context:
+            print(f"  [ANALYZER] Context: {list(context.keys())}")
+        
         result = self.specialists["analyzer"](state, task)
         
         # 解析分析结果
@@ -443,16 +530,60 @@ Target file: {state['target_file']}
             elif r.get("type") == "response":
                 analysis_text = r.get("content", "")
         
+        # 生成反馈
+        if issues:
+            feedback = f"Analysis complete: Found {len(issues)} issue(s). "
+            feedback += f"First issue: {issues[0][:100]}. "
+            feedback += "Recommendation: Call fixer to resolve errors."
+        else:
+            feedback = "Analysis complete: No issues detected. Code appears correct. "
+            feedback += "Recommendation: Call executor to verify functionality."
+        
+        # 结构化输出
+        structured_output = {
+            "agent": "analyzer",
+            "issues_found": len(issues),
+            "has_issues": len(issues) > 0,
+            "analysis_complete": True,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 准备上下文给下一个 agent
+        next_context = {}
+        if issues:
+            next_context["issues_to_fix"] = issues
+            next_context["priority_issue"] = issues[0]
+            next_context["target_file"] = state.get("target_file")
+        
+        print(f"  [ANALYZER] Feedback: {feedback[:150]}...")
+        
         return {
             "code_analysis": analysis_text,
             "identified_issues": issues,
             "analysis_complete": True,
-            "messages": result.get("messages", [])
+            "messages": result.get("messages", []),
+            # Agent communication
+            "last_agent": "analyzer",
+            "agent_feedback": feedback,
+            "last_agent_output": structured_output,
+            "context_for_next_agent": next_context
         }
     
     def _fixer_node(self, state: SingleFileState) -> Dict[str, Any]:
-        """Fixer节点"""
+        """
+        Fixer节点 - 动态交互版本
+        
+        修复代码并生成反馈
+        """
         task = state.get("current_task", "Fix the identified errors")
+        context = state.get("context_for_next_agent", {})
+        
+        print(f"\n  [FIXER] Task: {task[:100]}...")
+        if context:
+            print(f"  [FIXER] Context: {list(context.keys())}")
+            if "priority_issue" in context:
+                print(f"  [FIXER] Priority issue: {context['priority_issue'][:100]}")
+        
         result = self.specialists["fixer"](state, task)
         
         # 记录修改
@@ -470,14 +601,56 @@ Target file: {state['target_file']}
             if r.get("type") == "tool_result"
         )
         
+        # 生成反馈
+        if used_precise:
+            feedback = "Fix applied using precise edit (str_replace). "
+            feedback += "Code modified successfully. "
+            feedback += "Recommendation: Call executor to verify the fix worked."
+        else:
+            feedback = "Fixer completed but no str_replace detected. "
+            feedback += "May need to retry. "
+            feedback += "Recommendation: Call executor to check current state."
+        
+        # 结构化输出
+        structured_output = {
+            "agent": "fixer",
+            "used_precise_edit": used_precise,
+            "modifications_count": len(modification_history),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 准备上下文
+        next_context = {
+            "modified_file": state.get("target_file"),
+            "should_verify": True,
+            "modification_count": len(modification_history)
+        }
+        
+        print(f"  [FIXER] Feedback: {feedback[:150]}...")
+        
         return {
             "modification_history": modification_history,
-            "messages": result.get("messages", [])
+            "messages": result.get("messages", []),
+            # Agent communication
+            "last_agent": "fixer",
+            "agent_feedback": feedback,
+            "last_agent_output": structured_output,
+            "context_for_next_agent": next_context
         }
     
     def _executor_node(self, state: SingleFileState) -> Dict[str, Any]:
-        """Executor节点"""
+        """
+        Executor节点 - 动态交互版本
+        
+        执行代码并生成详细反馈
+        """
         task = state.get("current_task", "Execute the code to verify")
+        context = state.get("context_for_next_agent", {})
+        
+        print(f"\n  [EXECUTOR] Task: {task[:100]}...")
+        if context:
+            print(f"  [EXECUTOR] Context: {list(context.keys())}")
+        
         result = self.specialists["executor"](state, task)
         
         # 解析执行结果
@@ -498,12 +671,59 @@ Target file: {state['target_file']}
                     if not success:
                         error = result_str
         
+        # 生成反馈
+        if success:
+            feedback = "Execution successful! "
+            feedback += f"Output: {output[:100]}... " if output else "No output produced. "
+            feedback += "All checks passed. Code is working correctly. "
+            feedback += "Recommendation: FINISH (goal achieved)."
+        else:
+            feedback = f"Execution failed: {error[:150]}... "
+            # 分析错误类型
+            error_lower = error.lower()
+            if "syntaxerror" in error_lower or "indentationerror" in error_lower:
+                feedback += "Error type: Syntax error. "
+                feedback += "Recommendation: Call fixer to correct syntax."
+            elif "nameerror" in error_lower or "attributeerror" in error_lower:
+                feedback += "Error type: Name/Attribute error. "
+                feedback += "Recommendation: Call fixer to add missing definitions."
+            elif "modulenotfounderror" in error_lower or "importerror" in error_lower:
+                feedback += "Error type: Import error. "
+                feedback += "Recommendation: Call fixer to fix imports."
+            else:
+                feedback += "Error type: Runtime error. "
+                feedback += "Recommendation: Call fixer to debug logic."
+        
+        # 结构化输出
+        structured_output = {
+            "agent": "executor",
+            "execution_success": success,
+            "has_output": bool(output),
+            "has_error": bool(error),
+            "attempts": state.get("execution_attempts", 0) + 1,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 准备上下文
+        next_context = {}
+        if not success:
+            next_context["execution_error"] = error[:300]
+            next_context["target_file"] = state.get("target_file")
+            next_context["needs_fix"] = True
+        
+        print(f"  [EXECUTOR] Feedback: {feedback[:150]}...")
+        
         return {
             "execution_attempts": state.get("execution_attempts", 0) + 1,
             "execution_success": success,
             "last_execution_result": output[:500],
             "last_error": error[:500] if not success else "",
-            "messages": result.get("messages", [])
+            "messages": result.get("messages", []),
+            # Agent communication
+            "last_agent": "executor",
+            "agent_feedback": feedback,
+            "last_agent_output": structured_output,
+            "context_for_next_agent": next_context
         }
     
     def run(
